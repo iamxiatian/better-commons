@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "python-dotenv>=1.2.1",
     "rich>=14.3.2",
     "structlog>=25.5.0",
 ]

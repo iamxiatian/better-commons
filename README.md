@@ -16,6 +16,18 @@ uv run ruff check --fix --watch src/
 ./lint.sh
 ```
 
+## .env文件的使用
+
+创建.env文件（从.env.example复制），并保持私有，不要提交到版本控制中。
+.env文件用于存储敏感信息，如API密钥、数据库连接字符串等。
+.env文件中的变量可以在代码中使用os.environ.get()方法获取。
+
+```python
+import os
+API_KEY = os.environ.get("API_KEY")
+DATABASE_URL = os.environ.get("DATABASE_URL")
+```
+
 ## 开发环境设置
 
 1. 安装uv
