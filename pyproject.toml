@@ -1,0 +1,85 @@
+[project]
+name = "pytemplate"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "夏天", email = "xiat@ruc.edu.cn" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "rich>=14.3.2",
+    "structlog>=25.5.0",
+]
+
+[project.scripts]
+pytemplate = "pytemplate:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[[tool.uv.index]]
+name= "aliyun"
+url = "https://mirrors.aliyun.com/pypi/simple/"
+
+[tool.ruff]
+# 排除一些经常被忽略的目录。
+exclude = [
+    "conf",
+    "build",
+    "dist",
+    "ipynb",
+    "site-packages",
+    ".venv",
+    "setup.py"
+]
+
+line-length = 80
+indent-width = 4
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "C9", "UP", "S", "RUF"]
+ignore = ["E501", "S101", "RUF003", "RUF001", "RUF002"]
+fixable = ["ALL"]
+
+# 允许以下划线为前缀的未使用变量。
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+# 设置圈复杂度阈值
+[tool.ruff.lint.mccabe]
+# 需要同时在[tool.ruff]的select中启用C901，或者直接设置为ALL。
+max-complexity = 8
+
+
+[tool.ruff.lint.isort]
+lines-after-imports = 2
+
+[tool.ruff.format]
+
+# 像 Black 一样，字符串使用双引号。
+quote-style = "double"
+
+# 像 Black 一样，用空格缩进，而不是制表符。
+indent-style = "space"
+
+# 像 Black 一样，保留魔术尾随逗号。
+skip-magic-trailing-comma = false
+
+# 像 Black 一样，自动检测合适的行尾。
+line-ending = "auto"
+
+# Pyright配置：静态类型检查
+[tool.pyright]
+typeCheckingMode = "strict"  # 严格模式（新手可先设为"basic"）
+reportMissingTypeStubs = "warning"  # 缺失类型 stub 时警告
+reportUnusedVariable = "error"  # 未使用变量报错
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.408",
+    "pytest>=9.0.2",
+]
+
+
