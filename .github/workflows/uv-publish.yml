@@ -1,0 +1,26 @@
+name: Publish Python Package
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # 当推送形如 v1.0.0 的标签时触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write  # 用于可信发布，至关重要
+      contents: read
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+    - name: Build package
+      run: uv build
+    - name: Publish package to PyPI
+      run: uv publish
