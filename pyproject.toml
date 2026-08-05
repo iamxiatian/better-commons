@@ -1,16 +1,15 @@
 [project]
 name = "better-commons"
-version = "0.1.0"
+version = "0.1.1"
 description = "better commons python library"
 readme = "README.md"
 authors = [
     { name = "夏天", email = "xiat@ruc.edu.cn" }
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
     "httpx>=0.28.1",
     "orjson>=3.11.9",
-    "pypinyin>=0.55.0",
     "python-dotenv>=1.2.1",
     "rich>=14.3.2",
     "structlog>=25.5.0",
