@@ -12,4 +12,23 @@
         <description>API服务端口</description>
     </property>
 
+    <!--  增deepseek-v4-flash接口相关配置-start  -->
+    <property>
+        <name>llm.deepseek_v4_flash.api.base</name>
+        <value>http://www.yourserver.com/openAi/v1</value>
+        <description>deepseek_v4_flash的API访问路径，需要替换为真实地址</description>
+    </property>
+
+    <property>
+        <name>llm.deepseek_v4_flash.model.path</name>
+        <value>deepseek-v4-flash</value>
+        <description>deepseek_v4_flash的模型名称</description>
+    </property>
+
+    <property>
+        <name>llm.deepseek_v4_flash.authorization_key</name>
+        <value>your_key</value>
+        <description>deepseek_v4_flash的Authorization的值</description>
+    </property>
+
 </configurations>
