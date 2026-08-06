@@ -39,6 +39,8 @@ from pathlib import Path
 
 import structlog
 
+from commons.encrypt import EncryptFile
+
 
 logger = structlog.get_logger(__name__)
 
@@ -53,20 +55,24 @@ class Config:
     先读取`conf_files`中指定的变量，再继续读取对应的环境变量，如果指定则覆盖xml文件中的值。
     """
 
-    def __init__(self, *conf_files: Path | str) -> None:
-        """初始化配置对象并立即加载配置。"""
-        self._config: dict[str, str] = {}
-        self.load(conf_files)
-
-    def _load_xml_config(self, xml_path: Path) -> None:
-        """从 XML 文件加载配置项。
+    def __init__(self, *conf_files: Path | str | EncryptFile) -> None:
+        """初始化配置对象并立即加载配置。
 
         Args:
-            xml_path: XML 配置文件路径。
+            *conf_files: 配置文件，可为 ``Path``/``str`` 路径，
+                或 ``EncryptFile``（透明读取明文或密文）。
+        """
+        self._config: dict[str, str] = {}
+        self.load(*conf_files)
+
+    def _load_xml_config(self, xml_content: str) -> None:
+        """从 xml_content 字符串中加载配置项。
+
+        Args:
+            xml_content: XML的配置字符串，通常从文件中读取
         """
         try:
-            tree: ET.ElementTree[ET.Element[str]] = ET.parse(xml_path)
-            root = tree.getroot()
+            root: ET.Element[str] = ET.fromstring(xml_content)
 
             for property_elem in root.findall("property"):
                 name_elem = property_elem.find("name")
@@ -76,9 +82,6 @@ class Config:
                     name = str(name_elem.text).strip()
                     value = str(value_elem.text).strip()
                     self._config[name] = value
-
-        except FileNotFoundError:
-            logger.warning(f"警告: 配置文件 {xml_path} 不存在")
         except ET.ParseError as e:
             print(f"警告: 解析XML文件失败: {e}")
             sys.exit()
@@ -298,16 +301,42 @@ class Config:
         values = self._config[key].split(",")
         return [value.strip() for value in values if value.strip()]
 
-    def load(self, conf_files: tuple[Path | str, ...]) -> None:
-        """清空现有值并按优先级重新加载配置。"""
+    def load(self, *conf_files: Path | str | EncryptFile) -> None:
+        """清空现有值并按优先级重新加载配置。
+
+        Args:
+            *conf_files: 配置文件，可为 ``Path``/``str`` 路径，
+                或 ``EncryptFile``（透明读取明文或密文）。
+        """
         self._config.clear()
         for f in conf_files:
-            if not Path(f).exists():
+            if isinstance(f, str):
+                f = Path(f)
+            if f.exists():
+                content = self._read_conf(f)
+                self._load_xml_config(content)
+                logger.info(f"load conf: {f}")
+            else:
                 logger.error(f"conf file does not exist: {f}")
-            self._load_xml_config(Path(f))
-            logger.info(f"load conf: {f}")
         self._override_with_env()
         logger.info("override configuration by env.")
+
+    def _read_conf(self, conf_file: Path | str | EncryptFile) -> str:
+        """读取配置文件内容。
+
+        普通路径直接读取；``EncryptFile`` 通过其 ``read_text``
+        透明读取（有明文读明文，否则解密密文）。
+
+        Args:
+            conf_file: 配置文件路径或 ``EncryptFile``。
+
+        Returns:
+            配置文件的内容字符串。
+        """
+        if isinstance(conf_file, EncryptFile):
+            return conf_file.read_text(encoding="utf-8")
+
+        return Path(conf_file).read_text(encoding="utf-8")
 
     def show_config(self, skip_keys: list[str] | None = None) -> dict[str, str]:
         """返回配置项。

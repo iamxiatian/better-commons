@@ -14,3 +14,7 @@ wheels/
 # Virtual environments
 .venv
 config/conf-private.xml
+config/*.pdf
+config/*.jpg
+config/*.enc
+temp/

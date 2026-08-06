@@ -1,11 +1,15 @@
-import asyncio
-
-from commons import ChatModel, Config, configure_logging, create_chat_client
+from commons import Config, EncryptFile, configure_logging
 
 
 if __name__ == "__main__":
-    configure_logging()
-    config = Config("./config/conf-template.xml", "./config/conf-private.xml")
+    configure_logging("./logs")
+    key = bytes.fromhex("88bed135e2ae528f8f5e4dfd58fa8467")
+    config = Config(
+        "./config/conf-template.xml",
+        EncryptFile(
+            "./config/conf-private2.xml", "./config/conf-private.enc", key
+        ),
+    )
 
     # config demo
     host = config.get_option_str("api.server.host") or "127.0.0.1"
@@ -19,13 +23,13 @@ if __name__ == "__main__":
 
     print(host, port)
 
-    client = create_chat_client(
-        ChatModel.DEEPSEEK_V4_FLASH,
-        config=config,
-        max_tokens=8192,
-        cache_enabled=True,
-    )
-    response = asyncio.run(
-        client.chat(system_prompt="You're a good helper.", user_prompt="hello")
-    )
-    print(response)
+    # client = create_chat_client(
+    #     ChatModel.DEEPSEEK_V4_FLASH,
+    #     config=config,
+    #     max_tokens=8192,
+    #     cache_enabled=True,
+    # )
+    # response = asyncio.run(
+    #     client.chat(system_prompt="You're a good helper.", user_prompt="hello")
+    # )
+    # print(response)
