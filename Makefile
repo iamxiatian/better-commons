@@ -1,4 +1,4 @@
-.PHONY: help install test lint fmt build clean
+.PHONY: help install test lint fmt build clean docs docs-serve
 help:  ## 显示可用命令
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-10s\033[0m %s\n", $$1, $$2}'
 
@@ -23,6 +23,12 @@ fine:      ## 代码检查(lint)
 	uv run ruff format src tests
 	uv run basedpyright src tests --level warning
 
+
+docs:      ## 构建文档站点到 site/
+	uv run mkdocs build
+
+docs-serve:  ## 本地预览文档（http://127.0.0.1:8000）
+	uv run mkdocs serve
 
 clean:     ## 删缓存+临时文件
 	uv cache clean

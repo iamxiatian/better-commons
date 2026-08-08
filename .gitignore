@@ -18,3 +18,4 @@ config/*.pdf
 config/*.jpg
 config/*.enc
 temp/
+site/

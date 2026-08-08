@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from pathlib import Path
@@ -7,8 +9,8 @@ import structlog
 
 from commons.cv.annotate import (
     contrast_color,
+    get_font_path,
     get_polygon_points,
-    get_system_font_path,
 )
 from commons.cv.types import Point, RegionLike, SimpleRegion
 
@@ -17,26 +19,30 @@ logger = structlog.get_logger(__name__)
 
 
 class PdfAnnotator:
-    # 添加默认DPI常量(300为基准)
-    BASE_DPI = 300
-
     def __init__(
-        self, dpi: int, color_map: dict[str, tuple[int, int, int]] | None = None
+        self,
+        *,
+        color_map: dict[str, tuple[int, int, int]] | None = None,
+        scaling_factor: float = 1.0,
     ):
         """
-        Args:
-            color_map: 根据region的label，获取对应的线框颜色
-        """
-        # 基于DPI计算字体大小(按比例缩放)
-        # self.dpi = dpi
-        # scale_factor = self.dpi / self.BASE_DPI
-        # self.pdf_font_size = int(40 * scale_factor) # 9
+        初始化 PDF 标注器。
 
+        在将 PDF 页面转为高分辨率图片（如用于目标检测）时，检测算法得到的区域坐标是基于放大后的图像的。
+        为将这些坐标正确映射回原始 PDF 页面，需要根据图片的缩放比例对坐标进行反向缩放。
+
+        Args:
+            color_map: 可选，标签到 RGB 颜色元组的映射，用于为不同区域指定边框颜色。
+            scaling_factor: 坐标缩放因子，用于将检测到的区域坐标转换到 PDF 页面的原始坐标系。
+                通常取值为“渲染图片时的缩放倍数”的倒数。例如，若渲染图片时缩放倍数为 2（即设置dpi=72*2），
+                则此处应设为 0.5（即72/(72*2)），以对齐位置。
+        """
+        self.scaling_factor = scaling_factor
         self.pdf_font_size = 9  # PDF上的框的标题文字大小
 
-        font_path = get_system_font_path()
+        font_path = get_font_path()
         self.font = (
-            pymupdf.Font(fontfile=str(font_path))
+            pymupdf.Font(fontfile=str(font_path), language="zh-Hans")
             if font_path
             else pymupdf.Font("china-s")
         )
@@ -74,6 +80,12 @@ class PdfAnnotator:
                 for p in get_polygon_points(region.points, close=True)
             ]
 
+            # 缩放坐标
+            points = [
+                (int(x * self.scaling_factor), int(y * self.scaling_factor))
+                for x, y in points
+            ]
+
             # 3. 绘制多边形
             polygon_shape.draw_polyline(points)
 
@@ -88,9 +100,9 @@ class PdfAnnotator:
 
             # 2. 绘制元素类型文字(在矩形框上方左侧)
             # 计算文字位置(确保在页面范围内)
-            text_x = region.points[0].x + 5  # 左偏移5px
+            text_x = points[0][0] + 7  # 偏移10px
             text_y = (
-                region.points[0].y + self.pdf_font_size
+                points[0][1] + self.pdf_font_size
             )  # 上偏移(文字大小+2px间距)
 
             point = pymupdf.Point(
@@ -144,20 +156,50 @@ class PdfAnnotator:
 
 
 def annot_pdf_file(
-    pdf_file: Path,  # (页码, PIL图像)
+    pdf_file: Path | str,  # (页码, PIL图像)
     regions_map: Mapping[int, Sequence[RegionLike]],
     *,
-    out_file: Path,
-    dpi: int = 144,
+    out_file: Path | str,
     color_map: dict[str, tuple[int, int, int]] | None = None,
+    image_dpi: int = 72,
 ):
-    annotator = PdfAnnotator(dpi=dpi, color_map=color_map)
-    annotator.annot_pdf_file(pdf_file, regions_map, out_file)
+    """
+    对 PDF 文件的指定页面进行区域标注，并保存标注后的 PDF。
+
+    该函数会读取输入的 PDF 文件，根据提供的区域信息（如来自目标检测模型），
+    在对应的页面上绘制多边形边框和标签文本，最终生成带有标注的 PDF 文件。
+
+    Args:
+        pdf_file: 输入 PDF 文件的路径。
+        regions_map: 一个映射，键为页码（从 0 开始计数），值为该页面上所有区域的列表。
+            每个区域需符合 `RegionLike` 协议（包含 `points`、`label` 等属性）。
+        out_file: 标注后 PDF 的输出路径。
+        color_map: 可选，标签到 RGB 颜色元组的映射，用于为不同标签的区域指定边框颜色。
+            例如：`{"title": (255, 0, 0), "text": (0, 255, 0)}`。
+            若未提供或某标签未在映射中，则使用默认颜色（如红色）。
+        image_dpi: PDF转换为图片时使用的dpi。图片的坐标与PDF的坐标存在缩放关系，需要根据该dpi坐标缩放因子。
+        将坐标缩放回PDF 原始坐标系。缩放因子为72/image_dpi
+
+    Returns:
+        None
+
+    Raises:
+        FileNotFoundError: 当 `pdf_file` 不存在时抛出。
+        ValueError: 当 `regions_map` 中包含无效页码或区域数据格式错误时抛出。
+
+    Example:
+        >>> from pathlib import Path
+        >>> regions = {0: [Region(points=[(10,10),(100,10),(100,50),(10,50)], label="title")]}
+        >>> annot_pdf_file("input.pdf", regions, out_file="output.pdf", scaling_factor=0.5)
+    """
+    scaling_factor = 72.0 / image_dpi
+    annotator = PdfAnnotator(color_map=color_map, scaling_factor=scaling_factor)
+    annotator.annot_pdf_file(Path(pdf_file), regions_map, Path(out_file))
 
 
 if __name__ == "__main__":
     pdf_file = Path("./config/sample.pdf")
-    save_file = Path("./config/sample_annot.pdf")
+    out_file = Path("./config/sample_annot.pdf")
     region = SimpleRegion(
         label="text", points=[Point(100, 100), Point(300, 300)]
     )
@@ -171,5 +213,9 @@ if __name__ == "__main__":
     }
     color_map = {"text": (200, 100, 0), "参考文献": (100, 200, 50)}
     annot_pdf_file(
-        pdf_file, regions_map, out_file=save_file, color_map=color_map
+        pdf_file,
+        regions_map,
+        out_file=out_file,
+        color_map=color_map,
+        image_dpi=72,
     )

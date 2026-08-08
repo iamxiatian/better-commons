@@ -5,6 +5,12 @@ from commons.encrypt import EncryptFile
 from commons.llm_client import ChatClient, ChatError, ChatModel
 from commons.llm_client import create_client as create_chat_client
 from commons.logging_config import configure_logging
+from commons.pdf import (
+    PdfFile,
+    convert_pdf_to_images,
+    merge_images_to_pdf,
+    merge_pdf_files,
+)
 from commons.timer import Timer, TimerError
 
 
@@ -15,10 +21,14 @@ __all__ = [
     "Config",
     "ConfigError",
     "EncryptFile",
+    "PdfFile",
     "Timer",
     "TimerError",
     "annot_image_file",
     "annot_pdf_file",
     "configure_logging",
+    "convert_pdf_to_images",
     "create_chat_client",
+    "merge_images_to_pdf",
+    "merge_pdf_files",
 ]

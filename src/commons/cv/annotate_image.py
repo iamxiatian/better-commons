@@ -1,14 +1,20 @@
+from __future__ import annotations
+
 from pathlib import Path
 
+import structlog
 from PIL import Image, ImageDraw, ImageFont
 
 from commons.cv.annotate import (
     contrast_color,
+    get_font_path,
     get_polygon_points,
-    get_system_font_path,
 )
 
 from .types import Point, RegionLike
+
+
+logger = structlog.get_logger(__name__)
 
 
 class ImageAnnotator:
@@ -23,7 +29,7 @@ class ImageAnnotator:
         self.color_map: dict[str, tuple[int, int, int]] = color_map or {}
 
     def _get_image_font(self, font_size: int) -> ImageFont.BaseImageFont:
-        font_path: Path | None = get_system_font_path()
+        font_path: Path | None = get_font_path()
         if font_path:
             return ImageFont.truetype(str(font_path), font_size)
         else:
@@ -103,16 +109,19 @@ class ImageAnnotator:
         image_file: Path,
         *,
         regions: list[RegionLike],
-        save_file: Path,
+        out_file: Path,
     ) -> None:
         """在图片上绘制版面元素区域，用于EvaHan2026版面元素的可视化验证。
         Args:
             image_path (Path): 图片路径
             regions (list[EvahanRegion]): 版面元素区域列表
             color_map(dict[str, tuple[int, int, int]]): 元素名称和对应RGB的映射关系
-            save_file (str): 输出图片路径
+            out_file (Path): 输出图片路径
         """
         image: Image.Image = Image.open(image_file).convert("RGB")
+        logger.info(
+            f"annotate {image.width} x {image.height} image: {image_file}"
+        )
         for region in regions:
             color = self.color_map.get(region.label) or (200, 0, 0)
             image = self._draw_element(
@@ -122,17 +131,17 @@ class ImageAnnotator:
                 color=color,
             )
 
-        if not save_file.parent.exists():
-            save_file.parent.mkdir(parents=True, exist_ok=True)
+        if not out_file.parent.exists():
+            out_file.parent.mkdir(parents=True, exist_ok=True)
 
-        image.save(save_file)
+        image.save(out_file)
 
 
 def annot_image_file(
-    image_file: Path,
+    image_file: Path | str,
     *,
     regions: list[RegionLike],
-    out_file: Path,
+    out_file: Path | str,
     color_map: dict[str, tuple[int, int, int]] | None = None,
     font_size: int = 12,
 ):
@@ -140,16 +149,17 @@ def annot_image_file(
     对image_file根据regions进行标记，保存到out_file中
     """
     # 创建输出目录
-    out_file.parent.mkdir(parents=True, exist_ok=True)
     annotator = ImageAnnotator(font_size=font_size, color_map=color_map)
-    annotator.annot_image_file(image_file, regions=regions, save_file=out_file)
+    annotator.annot_image_file(
+        Path(image_file), regions=regions, out_file=Path(out_file)
+    )
 
 
 if __name__ == "__main__":
     from commons.cv.types import SimpleRegion
 
-    image_file = Path("./config/test.jpg")
-    save_file = Path("./config/test_annot.jpg")
+    image_file = Path("./config/sample.jpg")
+    out_file = Path("./config/sample_annot.jpg")
     region = SimpleRegion(
         label="text", points=[Point(100, 100), Point(300, 300)]
     )
@@ -161,6 +171,6 @@ if __name__ == "__main__":
     annot_image_file(
         image_file,
         regions=[region, region2],
-        out_file=save_file,
+        out_file=out_file,
         color_map=color_map,
     )

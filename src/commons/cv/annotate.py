@@ -36,8 +36,19 @@ def contrast_color(
     return text_color
 
 
-def get_system_font_path() -> Path | None:
-    """返回当前操作系统下的一个常用中文字体文件路径"""
+def get_font_path() -> Path | None:
+    """
+    如果config目录下存在文源圆体`LXGWWenKaiMonoLite-Regular.ttf`，则优先使用该字体，
+    否则返回当前操作系统下的一个常用中文字体文件路径
+    """
+    specified_font = Path("./config/WenYuanRoundedSC-Regular.ttf")
+    if specified_font.exists():
+        return specified_font
+    else:
+        logger.warning(
+            "PDF或者图片标记使用的指定字体不存在，请下载开源字体文源圆体并保存到'./config/WenYuanRoundedSC-Regular.ttf'"
+        )
+
     system = platform.system()
     if system == "Windows":
         # 优先使用微软雅黑（支持中文）
@@ -45,8 +56,8 @@ def get_system_font_path() -> Path | None:
     elif system == "Darwin":  # macOS
         # 苹方字体
         fonts = [
-            "/System/Library/Fonts/PingFang.ttc",
-            "/System/Library/Fonts/Supplemental/Songti.ttc",
+            # "/System/Library/Fonts/PingFang.ttc",
+            # "/System/Library/Fonts/Supplemental/Songti.ttc",
             "/Library/Fonts/Arial Unicode.ttf",
         ]
     else:  # Linux / Unix

@@ -1,0 +1,113 @@
+# =========================================================
+# better-commons 文档站点配置 (MkDocs Material + mkdocstrings)
+# 文档组织采用 Diátaxis 框架：教程 / 操作指南 / 参考 / 解释
+# =========================================================
+
+site_name: better-commons
+site_description: better commons python library — 开箱即用的 Python 基础库
+site_url: https://iamxiatian.github.io/better-commons/
+repo_url: https://github.com/iamxiatian/better-commons
+repo_name: iamxiatian/better-commons
+edit_uri: blob/main/docs/
+
+# ---- 主题 ----
+theme:
+  name: material
+  language: zh
+  # 浅色 / 深色 / 跟随系统
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: 切换到深色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: 切换到浅色模式
+  features:
+    - navigation.tabs        # 顶部标签页
+    - navigation.sections    # 侧边栏按分区折叠
+    - navigation.top         # 回到顶部按钮
+    - navigation.footer      # 页脚导航
+    - search.suggest
+    - search.highlight
+    - content.code.annotate  # 代码注释
+    - content.code.copy      # 代码块复制按钮
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/feather
+
+# ---- 插件 ----
+plugins:
+  - search:
+      lang:
+        - zh
+        - en
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]              # 让 griffe 能够解析 commons 包
+          inventories:
+            - https://docs.python.org/3/objects.inv
+          options:
+            docstring_style: google  # 解析 Google 风格 docstring
+            show_root_heading: true
+            show_root_full_path: false
+            show_category_heading: true
+            show_if_no_docstring: true
+            show_source: false
+            heading_level: 2
+            members_order: source
+            filters:
+              - "!^_"
+
+# ---- Markdown 扩展 ----
+markdown_extensions:
+  - admonition                                # 提示框 (!!! note 等)
+  - pymdownx.details                          # 可折叠提示框
+  - pymdownx.superfences                      # 代码块增强
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true                   # 选项卡式代码
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - toc:
+      permalink: true
+
+# ---- 导航 (Diátaxis) ----
+nav:
+  - 首页: index.md
+  - 快速开始: getting-started.md
+  - 教程 (Tutorials):
+      - "教程：第一个 LLM 应用": tutorials/first-llm-app.md
+  - 操作指南 (How-to):
+      - 配置管理: how-to/use-config.md
+      - 日志与追踪: how-to/use-logging.md
+      - 调用大模型: how-to/use-llm-client.md
+      - 文件加密: how-to/use-encryption.md
+      - PDF 与图像标注: how-to/annotate-pdf-image.md
+      - 代码计时: how-to/use-timer.md
+  - API 参考 (Reference):
+      - 配置 Config: reference/config.md
+      - 大模型 ChatClient: reference/llm-client.md
+      - 文件加密 EncryptFile: reference/encryption.md
+      - 日志 Logging: reference/logging.md
+      - 标注 Annotation: reference/annotation.md
+      - 计时 Timer: reference/timer.md
+  - 解释 (Explanation):
+      - 设计理念: explanation/design.md
+
+# ---- 页脚 ----
+copyright: Copyright &copy; 2026 夏天 (iamxiatian)
