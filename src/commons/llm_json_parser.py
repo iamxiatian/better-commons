@@ -155,7 +155,8 @@ async def parse(
             repaired_output = await llm_client.chat(
                 system_prompt=system_prompt, user_prompt=current_output
             )
-            current_output = repaired_output  # 修改为修复后的输出
+            # chat 返回 ChatReply；修复失败（text 为 None）时保留原文本以便下次重试
+            current_output = repaired_output.text or current_output
             # 提取修复后的 JSON 文本
             json_text = _extract_json_text(current_output)
             result = loads(json_text)

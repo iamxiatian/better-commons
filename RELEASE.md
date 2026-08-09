@@ -1,3 +1,11 @@
+## [V0.1.4]
+
+- ChatClient的返回结果由字符串改为ChatReply对象，记录返回结果，返回状态（如成功、超时、限速等）、模型从请求到返回的整体耗时
+- ChatClient调整cache_enabled->enable_cache，增加enable_thinking参数
+- ChatModel增加QWEN36_27B
+- ChatStatus增加LENGTH_LIMIT，表示因MaxToken限制导致输出被截断
+- llm_cache增加状态字段
+
 ## [V0.1.3] - 2026-08-07
 
 - annot_image_file和annot_image_file接收的文件的参数支持Path和str两种方式

@@ -17,7 +17,11 @@ PDF 的物理尺寸没变，但你每英寸塞的像素变多了，所以 get_pi
 from pathlib import Path
 
 import pymupdf
+import structlog
 from pymupdf.utils import getColor
+
+
+logger = structlog.get_logger(__name__)
 
 
 def merge_pdf_files(pdf_files: list[str | Path], out_file: str | Path) -> None:
@@ -169,8 +173,10 @@ def convert_pdf_to_images(
 class PdfFile:
     def __init__(self, pdf_file: str | Path):
         self.pdf_file = Path(pdf_file)
+        logger.info(f"open pdf file: {pdf_file}")
         self.doc: pymupdf.Document = pymupdf.open(pdf_file)
         self.page_count: int = self.doc.page_count
+        logger.info(f"metadata of {pdf_file}: {self.doc.metadata} ")
 
     def __del__(self):
         print(f"Closing PDF file:{self.pdf_file}")

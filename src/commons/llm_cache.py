@@ -17,14 +17,16 @@ _DEFAULT_EVICT_CHECK_INTERVAL_SECONDS = 300.0
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS llm_cache (
-    cache_key     TEXT PRIMARY KEY,
-    url           TEXT NOT NULL,
-    request_json  TEXT NOT NULL,
-    response_text TEXT NOT NULL,
-    model         TEXT NOT NULL,
-    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-    last_hit_at   TEXT NOT NULL DEFAULT (datetime('now')),
-    hit_count     INTEGER NOT NULL DEFAULT 0
+    cache_key      TEXT PRIMARY KEY,
+    url            TEXT NOT NULL,
+    request_json   TEXT NOT NULL,
+    response_data  TEXT NOT NULL,
+    response_status TEXT NOT NULL DEFAULT 'success',
+    duration_ms     INTEGER NOT NULL DEFAULT 0,
+    model          TEXT NOT NULL,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    last_hit_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    hit_count      INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_llm_cache_created_at ON llm_cache(created_at);
 """
@@ -73,9 +75,11 @@ class LLMCache:
         )
         return hashlib.sha256(canonical.encode()).hexdigest()
 
-    def get(self, cache_key: str) -> str | None:
+    def get(self, cache_key: str) -> tuple[str, str, int] | None:
+        """读取缓存，返回 ``(response_data, response_status, duration_ms)``；未命中返回 ``None``。"""
         row = self.conn.execute(
-            "SELECT response_text FROM llm_cache WHERE cache_key=?",
+            "SELECT response_data, response_status, duration_ms"
+            " FROM llm_cache WHERE cache_key=?",
             (cache_key,),
         ).fetchone()
         if row is None:
@@ -89,7 +93,7 @@ class LLMCache:
             (cache_key,),
         )
         self.conn.commit()
-        return str(row[0])
+        return str(row[0]), str(row[1]), int(row[2])
 
     def put(
         self,
@@ -97,20 +101,32 @@ class LLMCache:
         *,
         url: str,
         payload: dict[str, Any],
-        response_text: str,
+        response_data: str,
+        response_status: str,
+        duration_ms: int,
         model: str,
     ) -> None:
         request_json = dumps(payload, sort_keys=True)
         self.conn.execute(
             """
             INSERT INTO llm_cache
-                (cache_key, url, request_json, response_text, model)
-            VALUES (?, ?, ?, ?, ?)
+                (cache_key, url, request_json, response_data, response_status, duration_ms, model)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(cache_key) DO UPDATE SET
-                response_text=excluded.response_text,
+                response_data=excluded.response_data,
+                response_status=excluded.response_status,
+                duration_ms=excluded.duration_ms,
                 last_hit_at=datetime('now')
             """,
-            (cache_key, url, request_json, response_text, model),
+            (
+                cache_key,
+                url,
+                request_json,
+                response_data,
+                response_status,
+                duration_ms,
+                model,
+            ),
         )
         self._maybe_evict()
         self.conn.commit()
