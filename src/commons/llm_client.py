@@ -152,6 +152,14 @@ class ChatReply:
     cache_hit: bool = False
 
     @property
+    def success(self) -> bool:
+        return self.status == ChatStatus.SUCCESS
+
+    @property
+    def sensitive(self) -> bool:
+        return self.status == ChatStatus.SENSITIVE
+
+    @property
     def text(self) -> str:
         """从 ``response_data`` 中提取主要文本内容。
 

@@ -1,4 +1,9 @@
+## [V0.1.6]
+
+- ChatReply增加success和sensitive两个属性
+
 ## [V0.1.5]
+
 - ChatReply的text属性返回类型为str，如果response_data为None, 则抛出异常
 
 ## [V0.1.4]
