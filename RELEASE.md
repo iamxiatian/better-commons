@@ -1,3 +1,7 @@
+## [V0.1.7]
+
+- ChatReply增加exception字段，补充导致状态变化的异常信息，方便调用方获取使用
+
 ## [V0.1.6]
 
 - ChatReply增加success和sensitive两个属性

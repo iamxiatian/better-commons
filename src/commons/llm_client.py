@@ -144,12 +144,14 @@ class ChatReply:
         status: 对话状态，参考 :class:`ChatStatus`。
         duration_ms: 本次 LLM 请求耗时（毫秒）；缓存命中时为原始请求耗时。
         cache_hit: 本次结果是否直接来自缓存。
+        exception: 捕捉到的异常信息。
     """
 
     response_data: str | None = None
     status: ChatStatus = ChatStatus.SUCCESS
     duration_ms: int = 0
     cache_hit: bool = False
+    exception:Exception|None = None
 
     @property
     def success(self) -> bool:
@@ -522,6 +524,7 @@ class ChatClient:
                     response_data=None,
                     status=_classify_status(str(e)),
                     duration_ms=_elapsed_ms(start_time),
+                    exception=e
                 )
             except (KeyError, json.JSONDecodeError, TypeError) as e:
                 error_message = "unknown error"
@@ -548,6 +551,7 @@ class ChatClient:
                     else None,
                     status=_classify_status(error_message),
                     duration_ms=_elapsed_ms(start_time),
+                    exception=e
                 )
 
     async def forward(
