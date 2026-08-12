@@ -115,6 +115,7 @@ class ChatStatus(Enum):
     SENSITIVE = "sensitive_content"  # 含有敏感内容
     UNKNOWN = "unknown"  # 未能识别的其他异常
     LENGTH_LIMIT = "length_limit"  # 超过了设置的最大长度（max tokens)
+    NOT_AVALIABLE = "not_avaliable" # 服务不可用
 
 
 class ChatModel(Enum):
@@ -151,7 +152,7 @@ class ChatReply:
     cache_hit: bool = False
 
     @property
-    def text(self) -> str | None:
+    def text(self) -> str:
         """从 ``response_data`` 中提取主要文本内容。
 
         该属性为只读派生值，**不会写入数据库**：数据库仅保存 ``response_data``
@@ -159,7 +160,7 @@ class ChatReply:
         ``response_data``。
         """
         if not self.response_data:
-            return None
+            raise RuntimeError("access attribute text but not avaliable, check status first.")
         try:
             data = loads(self.response_data)
             if not isinstance(data, dict):

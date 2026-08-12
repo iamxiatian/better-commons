@@ -1,3 +1,6 @@
+## [V0.1.5]
+- ChatReply的text属性返回类型为str，如果response_data为None, 则抛出异常
+
 ## [V0.1.4]
 
 - ChatClient的返回结果由字符串改为ChatReply对象，记录返回结果，返回状态（如成功、超时、限速等）、模型从请求到返回的整体耗时
