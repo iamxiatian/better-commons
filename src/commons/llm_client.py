@@ -153,6 +153,11 @@ class ChatReply:
     cache_hit: bool = False
     exception:Exception|None = None
 
+    def raise_for_exception(self) -> None:
+        """如果存在异常，则抛出异常，否则什么都不做"""
+        if self.exception:
+            raise self.exception
+
     @property
     def success(self) -> bool:
         return self.status == ChatStatus.SUCCESS

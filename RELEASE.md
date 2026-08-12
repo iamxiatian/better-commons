@@ -1,3 +1,7 @@
+## [V0.1.8]
+
+- ChatReply增加raise_for_exception方法，方便调用直接抛出异常
+
 ## [V0.1.7]
 
 - ChatReply增加exception字段，补充导致状态变化的异常信息，方便调用方获取使用
