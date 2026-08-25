@@ -115,7 +115,7 @@ class ChatStatus(Enum):
     SENSITIVE = "sensitive_content"  # 含有敏感内容
     UNKNOWN = "unknown"  # 未能识别的其他异常
     LENGTH_LIMIT = "length_limit"  # 超过了设置的最大长度（max tokens)
-    NOT_AVALIABLE = "not_avaliable" # 服务不可用
+    NOT_AVALIABLE = "not_avaliable"  # 服务不可用
 
 
 class ChatModel(Enum):
@@ -151,7 +151,8 @@ class ChatReply:
     status: ChatStatus = ChatStatus.SUCCESS
     duration_ms: int = 0
     cache_hit: bool = False
-    exception:Exception|None = None
+    exception: Exception | None = None
+    trace_id: str | None = None
 
     def raise_for_exception(self) -> None:
         """如果存在异常，则抛出异常，否则什么都不做"""
@@ -167,6 +168,28 @@ class ChatReply:
         return self.status == ChatStatus.SENSITIVE
 
     @property
+    def response_id(self) -> str | None:
+        """从 ``response_data`` 中提取的ID， 示例：
+        ```python
+        response_data='{"choices":[{"finish_reason":"stop","index":0,"message":{"content":"Hello! How can I
+        help you today?
+        😊","role":"assistant"}}],"created":1787627686,"id":"chatcmpl-72be0072-fc80-9b4e-b9f3-a9745bc27179","model
+        ":"qwen3-30b-a3b-instruct-2507","object":"chat.completion","usage":{"completion_tokens":11,"prompt_tokens"
+        :20,"total_tokens":31}}'
+        ```
+        """
+        if not self.response_data:
+            return None
+        try:
+            data = loads(self.response_data)
+            if not isinstance(data, dict):
+                return None
+            return str(data["id"]) if "id" in data else None
+        except (KeyError, IndexError, TypeError, ValueError) as e:
+            logger.error(e, trace_id=self.trace_id)
+            return None
+
+    @property
     def text(self) -> str:
         """从 ``response_data`` 中提取主要文本内容。
 
@@ -175,7 +198,9 @@ class ChatReply:
         ``response_data``。
         """
         if not self.response_data:
-            raise RuntimeError("access attribute text but not avaliable, check status first.")
+            raise RuntimeError(
+                "access attribute text but not avaliable, check status first."
+            )
         try:
             data = loads(self.response_data)
             if not isinstance(data, dict):
@@ -516,6 +541,7 @@ class ChatClient:
                     response_data=dumps(response_data, indent=False),
                     status=chat_status,
                     duration_ms=duration_ms,
+                    trace_id=trace_id,
                 )
             except httpx.HTTPError as e:
                 logger.error(
@@ -529,7 +555,8 @@ class ChatClient:
                     response_data=None,
                     status=_classify_status(str(e)),
                     duration_ms=_elapsed_ms(start_time),
-                    exception=e
+                    exception=e,
+                    trace_id=trace_id,
                 )
             except (KeyError, json.JSONDecodeError, TypeError) as e:
                 error_message = "unknown error"
@@ -556,7 +583,8 @@ class ChatClient:
                     else None,
                     status=_classify_status(error_message),
                     duration_ms=_elapsed_ms(start_time),
-                    exception=e
+                    exception=e,
+                    trace_id=trace_id,
                 )
 
     async def forward(
@@ -604,7 +632,7 @@ class ChatClient:
 # 工厂函数
 # =========================================================
 def create_chat_client(
-    model_type: ChatModel,
+    model_type: ChatModel | str,
     *,
     config: Config,
     max_tokens: int,
@@ -617,13 +645,15 @@ def create_chat_client(
     """从配置文件创建 ``ChatClient``。
 
     Args:
-        model_type: 模型类型枚举值
+        model_type: 模型类型枚举值或者字符串，对应到配置文件中的llm.[model_type].*的配置
         max_tokens: 单次生成的最大 token 数
         enable_thinking: 是否启用思考模式，如果没有设置，则从配置文件中读取
         enable_cache: 是否启用 SQLite 响应缓存（默认启用）
         request_headers: 请求头
     """
-    llm_name = model_type.value
+    llm_name = (
+        model_type.value if isinstance(model_type, ChatModel) else model_type
+    )
     auth_key = config.get_option_str(f"llm.{llm_name}.authorization_key")
     auth_name = (
         config.get_option_str(f"llm.{llm_name}.authorization_name")

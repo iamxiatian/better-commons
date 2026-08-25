@@ -51,17 +51,9 @@ def llm_cmd():
         {
             "role": "user",
             "content": [
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": data_url
-                    }
-                },
-                {
-                    "type": "text",
-                    "text": user_input
-                }
-            ]
+                {"type": "image_url", "image_url": {"url": data_url}},
+                {"type": "text", "text": user_input},
+            ],
         }
     ]
 
@@ -103,5 +95,5 @@ def annotate_cmd():
 
 
 if __name__ == "__main__":
-    #annotate_cmd()
+    # annotate_cmd()
     llm_cmd()

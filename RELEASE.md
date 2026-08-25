@@ -1,3 +1,9 @@
+## [V0.1.9]
+
+- ChatReply增加response_id属性，方便获取LLM的返回ID
+- ChatReply的create_chat_client的model_type支持str和ChatModel两种参数类型，方便扩展
+
+
 ## [V0.1.8]
 
 - ChatReply增加raise_for_exception方法，方便调用直接抛出异常
