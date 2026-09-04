@@ -1,3 +1,8 @@
+## [V0.2.0] - 2026-09-04
+
+- logging_config中呃configure_logging函数支持传入日志级别level，默认由INFO改为DEBUG
+- llm_client中的DEBUG日志级别调整为INFO
+
 ## [V0.1.9]
 
 - ChatReply增加response_id属性，方便获取LLM的返回ID

@@ -148,12 +148,16 @@ def auto_capture_exc_info(
 # ==========================================
 
 
-def configure_logging(log_dir: str = "./logs", backup_count: int = 7) -> None:
+def configure_logging(log_dir: str = "./logs",
+    *,
+    level: int = logging.DEBUG,
+    backup_count: int = 7) -> None:
     """
     配置系统级日志，设置 Structlog 渲染管线及 Python 基础 Logging 路由。
 
     Args:
         log_dir (str): 日志文件存储的目录路径. Defaults to "./logs".
+        level (int): 日志级别. Defaults to logging.INFO.
         backup_count (int): 日志文件保留的天数(个数). Defaults to 7.
     """
     os.makedirs(log_dir, exist_ok=True)
@@ -211,7 +215,7 @@ def configure_logging(log_dir: str = "./logs", backup_count: int = 7) -> None:
 
     # 4. 注册到根 Logger
     root_logger: logging.Logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(level)
 
     # 清理可能存在的旧 Handlers，防止重复调用此函数时输出重复日志
     root_logger.handlers.clear()

@@ -525,10 +525,9 @@ class ChatClient:
                     url, headers=self.request_headers, json=payload
                 )
                 duration_ms = _elapsed_ms(start_time)
-                logger.debug(f"response: {response}")
                 response.raise_for_status()
                 response_data = response.json()
-                logger.debug(
+                logger.info(
                     f"LLM response：url={url}, model={self.model}, response={response_data}",
                     trace_id=trace_id,
                 )
@@ -606,7 +605,7 @@ class ChatClient:
         url = self.chat_url if request_type == "chat" else self.completion_url
 
         if "model" not in payload:
-            logger.debug("模型未指定，使用默认模型：%s", self.model)
+            logger.info("模型未指定，使用默认模型：%s", self.model)
             payload["model"] = self.model
         elif payload["model"] != self.model:
             logger.warning(
@@ -623,7 +622,7 @@ class ChatClient:
             response.raise_for_status()
 
             data = response.json()
-            logger.debug("LLM response received", url=url, model=self.model)
+            logger.info("LLM response received", url=url, model=self.model)
 
             return data, response.status_code
 
