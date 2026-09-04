@@ -1,6 +1,10 @@
+## [V0.2.1] - 2026-09-04
+
+- 完善llm_client中对异常的处理，如果接口是500，但reponse仍可能包含json信息，则记录并用于LLM错误分类
+
 ## [V0.2.0] - 2026-09-04
 
-- logging_config中呃configure_logging函数支持传入日志级别level，默认由INFO改为DEBUG
+- logging_config中的configure_logging函数支持传入日志级别level，默认由INFO改为DEBUG
 - llm_client中的DEBUG日志级别调整为INFO
 
 ## [V0.1.9]

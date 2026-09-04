@@ -148,10 +148,12 @@ def auto_capture_exc_info(
 # ==========================================
 
 
-def configure_logging(log_dir: str = "./logs",
+def configure_logging(
+    log_dir: str = "./logs",
     *,
     level: int = logging.DEBUG,
-    backup_count: int = 7) -> None:
+    backup_count: int = 7,
+) -> None:
     """
     配置系统级日志，设置 Structlog 渲染管线及 Python 基础 Logging 路由。
 

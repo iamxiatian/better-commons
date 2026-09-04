@@ -91,6 +91,7 @@ def _classify_status(
     sensitive_keywords = [
         "inappropriate content",
         "content filter",
+        "data_inspection_failed",
         "sensitive",
         "content policy",
         "violation",
@@ -524,9 +525,10 @@ class ChatClient:
                 response = await client.post(
                     url, headers=self.request_headers, json=payload
                 )
+                # 获取json格式的返回内容
+                response_data = response.json()
                 duration_ms = _elapsed_ms(start_time)
                 response.raise_for_status()
-                response_data = response.json()
                 logger.info(
                     f"LLM response：url={url}, model={self.model}, response={response_data}",
                     trace_id=trace_id,
@@ -544,15 +546,14 @@ class ChatClient:
                 )
             except httpx.HTTPError as e:
                 logger.error(
-                    f"HTTP request failed, url: {url}", trace_id=trace_id
-                )
-                logger.error(
-                    f"payload: {dumps(payload, indent=True)}",
+                    f"HTTP request failed, url: {url},\npayload: {dumps(payload, indent=True)}, response_data: {response_data}",
                     trace_id=trace_id,
                 )
                 return ChatReply(
-                    response_data=None,
-                    status=_classify_status(str(e)),
+                    response_data=response_data,
+                    status=_classify_status(
+                        f"error: {e}, response: {response_data}"
+                    ),
                     duration_ms=_elapsed_ms(start_time),
                     exception=e,
                     trace_id=trace_id,
