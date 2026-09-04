@@ -1,3 +1,7 @@
+## [V0.2.2] - 2026-09-04
+
+- 完善llm_client，将ChatReply中的response_data由字符串类型改为字典类型
+
 ## [V0.2.1] - 2026-09-04
 
 - 完善llm_client中对异常的处理，如果接口是500，但reponse仍可能包含json信息，则记录并用于LLM错误分类

@@ -148,7 +148,7 @@ class ChatReply:
         exception: 捕捉到的异常信息。
     """
 
-    response_data: str | None = None
+    response_data: dict[str, Any] | None = None
     status: ChatStatus = ChatStatus.SUCCESS
     duration_ms: int = 0
     cache_hit: bool = False
@@ -181,14 +181,8 @@ class ChatReply:
         """
         if not self.response_data:
             return None
-        try:
-            data = loads(self.response_data)
-            if not isinstance(data, dict):
-                return None
-            return str(data["id"]) if "id" in data else None
-        except (KeyError, IndexError, TypeError, ValueError) as e:
-            logger.error(e, trace_id=self.trace_id)
-            return None
+        return str(self.response_data["id"]) if "id" in self.response_data else None
+
 
     @property
     def text(self) -> str:
@@ -203,15 +197,12 @@ class ChatReply:
                 "access attribute text but not avaliable, check status first."
             )
         try:
-            data = loads(self.response_data)
-            if not isinstance(data, dict):
-                return self.response_data
-            choice = data["choices"][0]
+            choice = self.response_data["choices"][0]
             if "message" in choice:
                 return str(choice["message"]["content"]).strip()
             return str(choice["text"]).strip()
         except (KeyError, IndexError, TypeError, ValueError):
-            return self.response_data
+            return dumps(self.response_data)
 
 
 def _elapsed_ms(start: float) -> int:
@@ -483,7 +474,7 @@ class ChatClient:
         if cached_value is not None:
             cached_data, cached_status, cached_duration_ms = cached_value
             return ChatReply(
-                response_data=cached_data,
+                response_data=loads(cached_data) if cached_data else None,
                 status=cached_status,
                 duration_ms=cached_duration_ms,
                 cache_hit=True,
@@ -506,7 +497,7 @@ class ChatClient:
                 cache_key,
                 url=url,
                 payload=payload,
-                response_data=chat_reply.response_data or "",
+                response_data=dumps(chat_reply.response_data, indent=False) or "",
                 response_status=chat_reply.status.value,
                 duration_ms=chat_reply.duration_ms,
                 model=self.model,
@@ -520,7 +511,7 @@ class ChatClient:
     ) -> ChatReply:
         start_time = perf_counter()
         async with httpx.AsyncClient(timeout=Timeout(self.timeout)) as client:
-            response_data: Any = None
+            response_data: dict[str, Any]|None = None
             try:
                 response = await client.post(
                     url, headers=self.request_headers, json=payload
@@ -534,12 +525,15 @@ class ChatClient:
                     trace_id=trace_id,
                 )
 
-                chat_status = ChatStatus.SUCCESS
-                if response_data["choices"][0].get("finish_reason") == "length":
+                if response_data is None:
+                    chat_status = ChatStatus.UNKNOWN
+                elif response_data["choices"][0].get("finish_reason") == "length":
                     chat_status = ChatStatus.LENGTH_LIMIT
+                else:
+                    chat_status = ChatStatus.SUCCESS
 
                 return ChatReply(
-                    response_data=dumps(response_data, indent=False),
+                    response_data=response_data,
                     status=chat_status,
                     duration_ms=duration_ms,
                     trace_id=trace_id,
@@ -559,9 +553,7 @@ class ChatClient:
                     trace_id=trace_id,
                 )
             except (KeyError, json.JSONDecodeError, TypeError) as e:
-                error_message = "unknown error"
-                if response_data is not None:
-                    error_message = f"{response_data}"
+                error_message = f"{response_data}"
                 if isinstance(response_data, dict):
                     error = response_data.get("error")
                     if isinstance(error, dict) and error.get("message"):
@@ -578,9 +570,7 @@ class ChatClient:
                     trace_id=trace_id,
                 )
                 return ChatReply(
-                    response_data=dumps(response_data, indent=False)
-                    if isinstance(response_data, dict)
-                    else None,
+                    response_data=response_data,
                     status=_classify_status(error_message),
                     duration_ms=_elapsed_ms(start_time),
                     exception=e,
