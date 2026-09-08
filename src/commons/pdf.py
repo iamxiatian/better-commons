@@ -178,10 +178,6 @@ class PdfFile:
         self.page_count: int = self.doc.page_count
         logger.info(f"metadata of {pdf_file}: {self.doc.metadata} ")
 
-    def __del__(self):
-        print(f"Closing PDF file:{self.pdf_file}")
-        self.doc.close()
-
     def page_to_image_file(
         self, page_index: int, image_file: str | Path, *, dpi: int = 72
     ):
@@ -486,6 +482,9 @@ class PdfFile:
         with open(out_file, "w", encoding="utf-8") as f:
             f.write(text)
 
+    def close(self):
+        """关闭pdf文件"""
+        self.doc.close()
 
 def main():
     pass

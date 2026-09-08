@@ -1,3 +1,7 @@
+## [V0.2.3] - 2026-09-09
+
+- PDF增加close方法，支持手动关闭pdf文件
+
 ## [V0.2.2] - 2026-09-04
 
 - 完善llm_client，将ChatReply中的response_data由字符串类型改为字典类型
