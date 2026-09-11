@@ -336,6 +336,7 @@ class ChatClient:
         *,
         use_beam_search: bool = False,
         skip_special_tokens: bool = True,
+        custom_timeout: int | None = None,
         trace_id: str | None = None,
     ) -> ChatReply:
         """续写文本：给定 ``prompt``，让模型继续生成后续内容。
@@ -344,6 +345,7 @@ class ChatClient:
             prompt: 输入提示文本
             use_beam_search: 是否使用 beam search 搜索
             skip_special_tokens: 是否跳过输出中的特殊 token
+            custom_timeout: 自定义超时时间
             trace_id: 追踪id
 
         Returns:
@@ -361,7 +363,7 @@ class ChatClient:
         payload["skip_special_tokens"] = skip_special_tokens
 
         return await self._cached_or_post(
-            self.completion_url, payload, trace_id=trace_id
+            self.completion_url, payload, custom_timeout, trace_id=trace_id
         )
 
     # ---- 对话 ----
@@ -373,6 +375,7 @@ class ChatClient:
         system_prompt: str = "你是一个专业友好的AI助手，回答简洁准确，逻辑清晰，不编造虚假信息，如实回答不知道的内容。",
         skip_special_tokens: bool = True,
         response_format: dict[str, Any] | None = None,
+        custom_timeout: int | None = None,
         trace_id: str | None = None,
     ) -> ChatReply:
         """简单对话（系统指令 + 用户指令）。
@@ -383,6 +386,7 @@ class ChatClient:
             skip_special_tokens: 是否跳过输出中的特殊 token
             response_format: 返回格式要求，deepseek可参考
                 https://api-docs.deepseek.com/zh-cn/guides/json_mode
+            custom_timeout: 用户自定义超时时间（秒）
             trace_id: 追踪id
 
         Returns:
@@ -404,6 +408,7 @@ class ChatClient:
             messages=messages,
             skip_special_tokens=skip_special_tokens,
             response_format=response_format,
+            custom_timeout=custom_timeout,
             trace_id=trace_id,
         )
 
@@ -413,6 +418,7 @@ class ChatClient:
         messages: list[dict[str, Any]],
         skip_special_tokens: bool = True,
         response_format: dict[str, Any] | None = None,
+        custom_timeout: int | None = None,
         trace_id: str | None = None,
     ) -> ChatReply:
         """多轮对话：传入完整的消息列表进行对话。
@@ -421,6 +427,8 @@ class ChatClient:
             messages: 消息列表，每条消息包含 ``role`` 和 ``content`` 字段
             skip_special_tokens: 是否跳过输出中的特殊 token
             response_format: 返回格式
+            custom_timeout: 自定义超时时间（秒）
+            trace_id: 追踪id
 
         Returns:
             ``ChatReply`` 对象，包含 ``text``（输出内容）与 ``status``（对话状态）
@@ -443,7 +451,7 @@ class ChatClient:
         if response_format:
             payload["response_format"] = response_format
 
-        return await self._cached_or_post(self.chat_url, payload, trace_id)
+        return await self._cached_or_post(self.chat_url, payload, custom_timeout, trace_id)
 
     # ---- 底层请求 ----
 
@@ -467,9 +475,13 @@ class ChatClient:
         self,
         url: str,
         payload: dict[str, Any],
+        custom_timeout: int | None,
         trace_id: str | None,
     ) -> ChatReply:
-        """带缓存请求：命中返回缓存的 ``ChatReply``，未命中则请求并写入缓存。"""
+        """
+        带缓存请求：命中返回缓存的 ``ChatReply``，未命中则请求并写入缓存。
+
+        """
         cache_key, cached_value = self._try_cache(url, payload)
         if cached_value is not None:
             cached_data, cached_status, cached_duration_ms = cached_value
@@ -479,7 +491,7 @@ class ChatClient:
                 duration_ms=cached_duration_ms,
                 cache_hit=True,
             )
-        chat_reply = await self._post_and_parse(url, payload, trace_id)
+        chat_reply = await self._post_and_parse(url, payload, custom_timeout, trace_id)
         # 只缓存成功或者提示有敏感信息的情况
         if chat_reply.status in (ChatStatus.SUCCESS, ChatStatus.SENSITIVE):
             self._store_cache(cache_key, url, payload, chat_reply)
@@ -507,10 +519,11 @@ class ChatClient:
         self,
         url: str,
         payload: dict[str, Any],
+        custom_timeout: int | None,
         trace_id: str | None,
     ) -> ChatReply:
         start_time = perf_counter()
-        async with httpx.AsyncClient(timeout=Timeout(self.timeout)) as client:
+        async with httpx.AsyncClient(timeout=Timeout(custom_timeout or self.timeout)) as client:
             response_data: dict[str, Any]|None = None
             try:
                 response = await client.post(
