@@ -181,8 +181,11 @@ class ChatReply:
         """
         if not self.response_data:
             return None
-        return str(self.response_data["id"]) if "id" in self.response_data else None
-
+        return (
+            str(self.response_data["id"])
+            if "id" in self.response_data
+            else None
+        )
 
     @property
     def text(self) -> str:
@@ -451,7 +454,9 @@ class ChatClient:
         if response_format:
             payload["response_format"] = response_format
 
-        return await self._cached_or_post(self.chat_url, payload, custom_timeout, trace_id)
+        return await self._cached_or_post(
+            self.chat_url, payload, custom_timeout, trace_id
+        )
 
     # ---- 底层请求 ----
 
@@ -491,7 +496,9 @@ class ChatClient:
                 duration_ms=cached_duration_ms,
                 cache_hit=True,
             )
-        chat_reply = await self._post_and_parse(url, payload, custom_timeout, trace_id)
+        chat_reply = await self._post_and_parse(
+            url, payload, custom_timeout, trace_id
+        )
         # 只缓存成功或者提示有敏感信息的情况
         if chat_reply.status in (ChatStatus.SUCCESS, ChatStatus.SENSITIVE):
             self._store_cache(cache_key, url, payload, chat_reply)
@@ -509,7 +516,8 @@ class ChatClient:
                 cache_key,
                 url=url,
                 payload=payload,
-                response_data=dumps(chat_reply.response_data, indent=False) or "",
+                response_data=dumps(chat_reply.response_data, indent=False)
+                or "",
                 response_status=chat_reply.status.value,
                 duration_ms=chat_reply.duration_ms,
                 model=self.model,
@@ -523,8 +531,10 @@ class ChatClient:
         trace_id: str | None,
     ) -> ChatReply:
         start_time = perf_counter()
-        async with httpx.AsyncClient(timeout=Timeout(custom_timeout or self.timeout)) as client:
-            response_data: dict[str, Any]|None = None
+        async with httpx.AsyncClient(
+            timeout=Timeout(custom_timeout or self.timeout)
+        ) as client:
+            response_data: dict[str, Any] | None = None
             try:
                 response = await client.post(
                     url, headers=self.request_headers, json=payload
@@ -540,7 +550,9 @@ class ChatClient:
 
                 if response_data is None:
                     chat_status = ChatStatus.UNKNOWN
-                elif response_data["choices"][0].get("finish_reason") == "length":
+                elif (
+                    response_data["choices"][0].get("finish_reason") == "length"
+                ):
                     chat_status = ChatStatus.LENGTH_LIMIT
                 else:
                     chat_status = ChatStatus.SUCCESS

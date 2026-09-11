@@ -486,5 +486,6 @@ class PdfFile:
         """关闭pdf文件"""
         self.doc.close()
 
+
 def main():
     pass

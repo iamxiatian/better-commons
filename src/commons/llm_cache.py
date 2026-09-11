@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 from typing import Any, ClassVar
 
+import structlog
+
 from commons.json_codec import dumps
 
 
@@ -30,6 +32,8 @@ CREATE TABLE IF NOT EXISTS llm_cache (
 );
 CREATE INDEX IF NOT EXISTS idx_llm_cache_created_at ON llm_cache(created_at);
 """
+
+logger = structlog.get_logger(__name__)
 
 
 class LLMCache:
@@ -75,25 +79,33 @@ class LLMCache:
         )
         return hashlib.sha256(canonical.encode()).hexdigest()
 
-    def get(self, cache_key: str) -> tuple[str, str, int] | None:
+    def get(
+        self, cache_key: str, trace_id: str | None = None
+    ) -> tuple[str, str, int] | None:
         """读取缓存，返回 ``(response_data, response_status, duration_ms)``；未命中返回 ``None``。"""
-        row = self.conn.execute(
-            "SELECT response_data, response_status, duration_ms"
-            " FROM llm_cache WHERE cache_key=?",
-            (cache_key,),
-        ).fetchone()
-        if row is None:
+        try:
+            row = self.conn.execute(
+                "SELECT response_data, response_status, duration_ms"
+                " FROM llm_cache WHERE cache_key=?",
+                (cache_key,),
+            ).fetchone()
+            if row is None:
+                return None
+            self.conn.execute(
+                """
+                UPDATE llm_cache
+                SET hit_count = hit_count + 1, last_hit_at = datetime('now')
+                WHERE cache_key=?
+                """,
+                (cache_key,),
+            )
+            self.conn.commit()
+            return str(row[0]), str(row[1]), int(row[2])
+        except Exception as e:
+            logger.error(
+                f"get cache error, key={cache_key}: {e}", trace_id=trace_id
+            )
             return None
-        self.conn.execute(
-            """
-            UPDATE llm_cache
-            SET hit_count = hit_count + 1, last_hit_at = datetime('now')
-            WHERE cache_key=?
-            """,
-            (cache_key,),
-        )
-        self.conn.commit()
-        return str(row[0]), str(row[1]), int(row[2])
 
     def put(
         self,
@@ -105,31 +117,37 @@ class LLMCache:
         response_status: str,
         duration_ms: int,
         model: str,
+        trace_id: str | None = None,
     ) -> None:
-        request_json = dumps(payload, sort_keys=True)
-        self.conn.execute(
-            """
-            INSERT INTO llm_cache
-                (cache_key, url, request_json, response_data, response_status, duration_ms, model)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(cache_key) DO UPDATE SET
-                response_data=excluded.response_data,
-                response_status=excluded.response_status,
-                duration_ms=excluded.duration_ms,
-                last_hit_at=datetime('now')
-            """,
-            (
-                cache_key,
-                url,
-                request_json,
-                response_data,
-                response_status,
-                duration_ms,
-                model,
-            ),
-        )
-        self._maybe_evict()
-        self.conn.commit()
+        try:
+            request_json = dumps(payload, sort_keys=True)
+            self.conn.execute(
+                """
+                INSERT INTO llm_cache
+                    (cache_key, url, request_json, response_data, response_status, duration_ms, model)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(cache_key) DO UPDATE SET
+                    response_data=excluded.response_data,
+                    response_status=excluded.response_status,
+                    duration_ms=excluded.duration_ms,
+                    last_hit_at=datetime('now')
+                """,
+                (
+                    cache_key,
+                    url,
+                    request_json,
+                    response_data,
+                    response_status,
+                    duration_ms,
+                    model,
+                ),
+            )
+            self._maybe_evict()
+            self.conn.commit()
+        except Exception as e:
+            logger.error(
+                f"put cache error, key={cache_key}: {e}", trace_id=trace_id
+            )
 
     def _maybe_evict(self) -> None:
         if self.max_rows <= 0:
