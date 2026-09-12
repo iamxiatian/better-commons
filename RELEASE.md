@@ -1,3 +1,15 @@
+## [V0.2.6] - 2026-09-12
+
+- llm_cache 修复多线程/多进程并发问题：连接按线程隔离、open() 加锁保证单例、启用 WAL，
+  避免共享同一 sqlite 连接导致事务状态错乱与写入静默丢失
+- llm_cache 的 get() 改为纯读操作（命中计数改为内存累加、批量落盘），
+  消除每次缓存命中都要写库带来的写锁竞争
+- llm_client 的缓存读写改由线程池执行，避免同步 sqlite 调用阻塞事件循环
+- ChatClient 复用 httpx 连接池（不再每次请求新建），新增 aclose() 与 async with 支持
+- 修复超时状态分类：httpx 超时异常 str() 为空导致被归类为 UNKNOWN，
+  现把异常类名纳入匹配，可正确识别为 TIMEOUT
+- llm_cache增加异常捕获，避免缓存写入失败导致程序异常
+
 ## [V0.2.4] - 2026-09-11
 
 - ChatClient增加custom_timeout参数，支持自定义超时时间

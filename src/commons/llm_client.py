@@ -35,6 +35,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 from enum import Enum
@@ -59,7 +60,14 @@ def _classify_status(
 ) -> ChatStatus:
     """依据错误信息字符串进行对话状态的分类。"""
     # 合并所有可用的文本信息并转为小写，提高匹配成功率
-    error_text = f"{message} {str(error) if error else ''}".lower()
+    error_text = f"{message} {str(error) if error else ''}"
+    if error is not None:
+        # httpx 的部分异常 str() 为空（如 str(ReadTimeout) == ""），只有类名
+        # 及其基类名携带可匹配信息（ReadTimeout / TimeoutException），故一并纳入
+        error_text += " " + " ".join(
+            cls.__name__ for cls in type(error).__mro__
+        )
+    error_text = error_text.lower()
 
     # 1. 匹配超时（网络层面）
     timeout_keywords = [
@@ -293,6 +301,10 @@ class ChatClient:
             db_path.parent.mkdir(parents=True, exist_ok=True)
             self._cache = LLMCache.open(db_path)
 
+        # 复用的 HTTP 连接池：按事件循环缓存，避免每次请求重新握手
+        self._http: httpx.AsyncClient | None = None
+        self._http_loop: asyncio.AbstractEventLoop | None = None
+
         # HTTP 请求头
         self.request_headers: dict[str, str] = (
             {"Content-Type": "application/json"}
@@ -458,23 +470,51 @@ class ChatClient:
             self.chat_url, payload, custom_timeout, trace_id
         )
 
+    # ---- 连接管理 ----
+
+    def _get_http_client(self) -> httpx.AsyncClient:
+        """返回当前事件循环复用的 HTTP 连接池。
+
+        连接池与事件循环绑定：若检测到换了事件循环（例如在脚本里反复调用
+        ``asyncio.run()``），则丢弃旧连接池并新建，避免跨循环复用连接。
+        """
+        loop = asyncio.get_running_loop()
+        if self._http is None or self._http_loop is not loop:
+            self._http = httpx.AsyncClient(timeout=Timeout(self.timeout))
+            self._http_loop = loop
+        return self._http
+
+    async def aclose(self) -> None:
+        """关闭复用的 HTTP 连接池。服务退出（如 FastAPI lifespan）时应调用一次。"""
+        if self._http is not None:
+            await self._http.aclose()
+            self._http = None
+            self._http_loop = None
+
+    async def __aenter__(self) -> ChatClient:
+        return self
+
+    async def __aexit__(self, *_exc_info: object) -> None:
+        await self.aclose()
+
     # ---- 底层请求 ----
 
-    def _try_cache(
-        self,
-        url: str,
-        payload: dict[str, Any],
-    ) -> tuple[str | None, tuple[str, ChatStatus, int] | None]:
-        """返回 (cache_key, cached_text, cached_status, cached_duration_ms)；
-        未启用或未命中时后三者均为 None。"""
-        if not self.cache_enabled or self._cache is None:
-            return None, None
-        cache_key = self._cache.make_key(url, payload)
-        cached = self._cache.get(cache_key)
+    async def _read_cache(
+        self, cache_key: str, trace_id: str | None
+    ) -> tuple[str, ChatStatus, int] | None:
+        """在线程池中读取缓存。
+
+        sqlite3 调用是同步阻塞的，直接放在事件循环里会冻结整个 worker，
+        因此统一交给线程池执行（``LLMCache`` 内部按线程隔离连接）。
+        """
+        assert self._cache is not None
+        cached = await asyncio.to_thread(
+            self._cache.get, cache_key, trace_id=trace_id
+        )
         if cached is None:
-            return cache_key, None
+            return None
         data, status, duration_ms = cached
-        return cache_key, (data, ChatStatus(status), duration_ms)
+        return data, ChatStatus(status), duration_ms
 
     async def _cached_or_post(
         self,
@@ -487,24 +527,27 @@ class ChatClient:
         带缓存请求：命中返回缓存的 ``ChatReply``，未命中则请求并写入缓存。
 
         """
-        cache_key, cached_value = self._try_cache(url, payload)
-        if cached_value is not None:
-            cached_data, cached_status, cached_duration_ms = cached_value
-            return ChatReply(
-                response_data=loads(cached_data) if cached_data else None,
-                status=cached_status,
-                duration_ms=cached_duration_ms,
-                cache_hit=True,
-            )
+        cache_key: str | None = None
+        if self.cache_enabled and self._cache is not None:
+            cache_key = self._cache.make_key(url, payload)
+            cached_value = await self._read_cache(cache_key, trace_id)
+            if cached_value is not None:
+                cached_data, cached_status, cached_duration_ms = cached_value
+                return ChatReply(
+                    response_data=loads(cached_data) if cached_data else None,
+                    status=cached_status,
+                    duration_ms=cached_duration_ms,
+                    cache_hit=True,
+                )
         chat_reply = await self._post_and_parse(
             url, payload, custom_timeout, trace_id
         )
         # 只缓存成功或者提示有敏感信息的情况
         if chat_reply.status in (ChatStatus.SUCCESS, ChatStatus.SENSITIVE):
-            self._store_cache(cache_key, url, payload, chat_reply)
+            await self._store_cache(cache_key, url, payload, chat_reply)
         return chat_reply
 
-    def _store_cache(
+    async def _store_cache(
         self,
         cache_key: str | None,
         url: str,
@@ -512,7 +555,8 @@ class ChatClient:
         chat_reply: ChatReply,
     ) -> None:
         if cache_key and self.cache_enabled and self._cache is not None:
-            self._cache.put(
+            await asyncio.to_thread(
+                self._cache.put,
                 cache_key,
                 url=url,
                 payload=payload,
@@ -531,76 +575,75 @@ class ChatClient:
         trace_id: str | None,
     ) -> ChatReply:
         start_time = perf_counter()
-        async with httpx.AsyncClient(
-            timeout=Timeout(custom_timeout or self.timeout)
-        ) as client:
-            response_data: dict[str, Any] | None = None
-            try:
-                response = await client.post(
-                    url, headers=self.request_headers, json=payload
-                )
-                # 获取json格式的返回内容
-                response_data = response.json()
-                duration_ms = _elapsed_ms(start_time)
-                response.raise_for_status()
-                logger.info(
-                    f"LLM response：url={url}, model={self.model}, response={response_data}",
-                    trace_id=trace_id,
-                )
+        client = self._get_http_client()
+        response_data: dict[str, Any] | None = None
+        try:
+            response = await client.post(
+                url,
+                headers=self.request_headers,
+                json=payload,
+                timeout=Timeout(custom_timeout or self.timeout),
+            )
+            # 获取json格式的返回内容
+            response_data = response.json()
+            duration_ms = _elapsed_ms(start_time)
+            response.raise_for_status()
+            logger.info(
+                f"LLM response：url={url}, model={self.model}, response={response_data}",
+                trace_id=trace_id,
+            )
 
-                if response_data is None:
-                    chat_status = ChatStatus.UNKNOWN
-                elif (
-                    response_data["choices"][0].get("finish_reason") == "length"
-                ):
-                    chat_status = ChatStatus.LENGTH_LIMIT
-                else:
-                    chat_status = ChatStatus.SUCCESS
+            if response_data is None:
+                chat_status = ChatStatus.UNKNOWN
+            elif response_data["choices"][0].get("finish_reason") == "length":
+                chat_status = ChatStatus.LENGTH_LIMIT
+            else:
+                chat_status = ChatStatus.SUCCESS
 
-                return ChatReply(
-                    response_data=response_data,
-                    status=chat_status,
-                    duration_ms=duration_ms,
-                    trace_id=trace_id,
-                )
-            except httpx.HTTPError as e:
+            return ChatReply(
+                response_data=response_data,
+                status=chat_status,
+                duration_ms=duration_ms,
+                trace_id=trace_id,
+            )
+        except httpx.HTTPError as e:
+            logger.error(
+                f"HTTP request failed, url: {url},\npayload: {dumps(payload, indent=True)}, response_data: {response_data}",
+                trace_id=trace_id,
+            )
+            return ChatReply(
+                response_data=response_data,
+                status=_classify_status(
+                    f"error: {e}, response: {response_data}", e
+                ),
+                duration_ms=_elapsed_ms(start_time),
+                exception=e,
+                trace_id=trace_id,
+            )
+        except (KeyError, json.JSONDecodeError, TypeError) as e:
+            error_message = f"{response_data}"
+            if isinstance(response_data, dict):
+                error = response_data.get("error")
+                if isinstance(error, dict) and error.get("message"):
+                    error_message = str(error["message"])
+
+            error_message = f"{e}{error_message}"
+            if "limit" in error_message:
                 logger.error(
-                    f"HTTP request failed, url: {url},\npayload: {dumps(payload, indent=True)}, response_data: {response_data}",
+                    f"请求超过LLM API限制：{error_message}",
                     trace_id=trace_id,
                 )
-                return ChatReply(
-                    response_data=response_data,
-                    status=_classify_status(
-                        f"error: {e}, response: {response_data}"
-                    ),
-                    duration_ms=_elapsed_ms(start_time),
-                    exception=e,
-                    trace_id=trace_id,
-                )
-            except (KeyError, json.JSONDecodeError, TypeError) as e:
-                error_message = f"{response_data}"
-                if isinstance(response_data, dict):
-                    error = response_data.get("error")
-                    if isinstance(error, dict) and error.get("message"):
-                        error_message = str(error["message"])
-
-                error_message = f"{e}{error_message}"
-                if "limit" in error_message:
-                    logger.error(
-                        f"请求超过LLM API限制：{error_message}",
-                        trace_id=trace_id,
-                    )
-                logger.error(
-                    f"Failed to parse response: {error_message}",
-                    trace_id=trace_id,
-                )
-                return ChatReply(
-                    response_data=response_data,
-                    status=_classify_status(error_message),
-                    duration_ms=_elapsed_ms(start_time),
-                    exception=e,
-                    trace_id=trace_id,
-                )
+            logger.error(
+                f"Failed to parse response: {error_message}",
+                trace_id=trace_id,
+            )
+            return ChatReply(
+                response_data=response_data,
+                status=_classify_status(error_message),
+                duration_ms=_elapsed_ms(start_time),
+                exception=e,
+                trace_id=trace_id,
+            )
 
     async def forward(
         self,
@@ -631,16 +674,19 @@ class ChatClient:
             )
             payload["model"] = self.model
 
-        async with httpx.AsyncClient(timeout=Timeout(self.timeout)) as client:
-            response = await client.post(
-                url, headers=self.request_headers, json=payload
-            )
-            response.raise_for_status()
+        client = self._get_http_client()
+        response = await client.post(
+            url,
+            headers=self.request_headers,
+            json=payload,
+            timeout=Timeout(self.timeout),
+        )
+        response.raise_for_status()
 
-            data = response.json()
-            logger.info("LLM response received", url=url, model=self.model)
+        data = response.json()
+        logger.info("LLM response received", url=url, model=self.model)
 
-            return data, response.status_code
+        return data, response.status_code
 
 
 # =========================================================
