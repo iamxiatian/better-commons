@@ -390,6 +390,7 @@ class ChatClient:
         system_prompt: str = "你是一个专业友好的AI助手，回答简洁准确，逻辑清晰，不编造虚假信息，如实回答不知道的内容。",
         skip_special_tokens: bool = True,
         response_format: dict[str, Any] | None = None,
+        extra_body: dict[str, Any] | None = None,
         custom_timeout: int | None = None,
         trace_id: str | None = None,
     ) -> ChatReply:
@@ -399,6 +400,7 @@ class ChatClient:
             system_prompt: 系统提示词，定义助手角色和行为
             user_prompt: 用户输入
             skip_special_tokens: 是否跳过输出中的特殊 token
+            extra_body: 额外的请求体参数，以方便对不同的模型进行个性化参数设置
             response_format: 返回格式要求，deepseek可参考
                 https://api-docs.deepseek.com/zh-cn/guides/json_mode
             custom_timeout: 用户自定义超时时间（秒）
@@ -422,6 +424,7 @@ class ChatClient:
         return await self.chat_messages(
             messages=messages,
             skip_special_tokens=skip_special_tokens,
+            extra_body=extra_body,
             response_format=response_format,
             custom_timeout=custom_timeout,
             trace_id=trace_id,
@@ -433,6 +436,7 @@ class ChatClient:
         messages: list[dict[str, Any]],
         skip_special_tokens: bool = True,
         response_format: dict[str, Any] | None = None,
+        extra_body: dict[str, Any] | None = None,
         custom_timeout: int | None = None,
         trace_id: str | None = None,
     ) -> ChatReply:
@@ -440,6 +444,7 @@ class ChatClient:
 
         Args:
             messages: 消息列表，每条消息包含 ``role`` 和 ``content`` 字段
+            extra_body: 额外的请求体参数，以方便对不同的模型进行个性化参数设置
             skip_special_tokens: 是否跳过输出中的特殊 token
             response_format: 返回格式
             custom_timeout: 自定义超时时间（秒）
@@ -465,6 +470,9 @@ class ChatClient:
         payload["skip_special_tokens"] = skip_special_tokens
         if response_format:
             payload["response_format"] = response_format
+
+        if extra_body:
+            payload.update(extra_body)
 
         return await self._cached_or_post(
             self.chat_url, payload, custom_timeout, trace_id
