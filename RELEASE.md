@@ -1,3 +1,6 @@
+## [V0.2.7] - 2026-09-22
+
+- llm_client 增加 http_max_connections 和 http_max_keepalive_connections 参数，支持自定义连接池大小
 
 ## [V0.2.6] - 2026-09-12
 

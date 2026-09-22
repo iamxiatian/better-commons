@@ -257,6 +257,8 @@ class ChatClient:
         n_choices: int = 1,
         repetition_penalty: float = 1.0,
         timeout: int = 60,
+        http_max_connections: int = 100,
+        http_max_keepalive_connections: int = 20,
         request_headers: dict[str, str] | None = None,
         enable_cache: bool = False,
         cache_path: str = "./data/llm_cache.db",
@@ -294,6 +296,8 @@ class ChatClient:
         self.n_choices = n_choices
         self.repetition_penalty = repetition_penalty
         self.timeout = timeout
+        self.http_max_connections = http_max_connections
+        self.http_max_keepalive_connections = http_max_keepalive_connections
         self.cache_enabled = enable_cache
         self._cache: LLMCache | None = None
         if self.cache_enabled:
@@ -488,7 +492,13 @@ class ChatClient:
         """
         loop = asyncio.get_running_loop()
         if self._http is None or self._http_loop is not loop:
-            self._http = httpx.AsyncClient(timeout=Timeout(self.timeout))
+            self._http = httpx.AsyncClient(
+                limits=httpx.Limits(
+                    max_connections=self.http_max_connections,
+                    max_keepalive_connections=self.http_max_keepalive_connections,
+                ),
+                timeout=Timeout(self.timeout),
+            )
             self._http_loop = loop
         return self._http
 
@@ -731,6 +741,13 @@ def create_chat_client(
     api_base = config.get_str(f"llm.{llm_name}.api.base")
     model = config.get_str(f"llm.{llm_name}.model.path")
     temperature = config.get_option_float("llm.default.temperature") or 0.00001
+    http_max_connections = (
+        config.get_option_int(f"llm.{llm_name}.http_max_connections") or 100
+    )
+    http_max_keepalive_connections = (
+        config.get_option_int(f"llm.{llm_name}.http_max_keepalive_connections")
+        or 20
+    )
 
     if enable_thinking is None:
         thinking = config.get_option_bool(f"llm.{llm_name}.thinking") or False
@@ -760,6 +777,8 @@ def create_chat_client(
         n_choices=n_choices,
         repetition_penalty=repetition_penalty,
         timeout=timeout,
+        http_max_connections=http_max_connections,
+        http_max_keepalive_connections=http_max_keepalive_connections,
         request_headers=request_headers,
         enable_cache=enable_cache,
         cache_path=cache_path,
