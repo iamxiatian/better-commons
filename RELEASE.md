@@ -1,3 +1,7 @@
+## [V0.2.8] - 2026-10-08
+
+- Config的load方法增加clear参数，可以控制是否清空掉读取过的配置信息
+
 ## [V0.2.7] - 2026-09-22
 
 - llm_client 增加 http_max_connections 和 http_max_keepalive_connections 参数，支持自定义连接池大小

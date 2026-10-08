@@ -63,7 +63,7 @@ class Config:
                 或 ``EncryptFile``（透明读取明文或密文）。
         """
         self._config: dict[str, str] = {}
-        self.load(*conf_files)
+        self.load(*conf_files, clear=True)
 
     def _load_xml_config(self, xml_content: str) -> None:
         """从 xml_content 字符串中加载配置项。
@@ -301,14 +301,19 @@ class Config:
         values = self._config[key].split(",")
         return [value.strip() for value in values if value.strip()]
 
-    def load(self, *conf_files: Path | str | EncryptFile) -> None:
-        """清空现有值并按优先级重新加载配置。
+    def load(
+        self, *conf_files: Path | str | EncryptFile, clear: bool = True
+    ) -> None:
+        """按优先级重新加载配置。
 
         Args:
             *conf_files: 配置文件，可为 ``Path``/``str`` 路径，
                 或 ``EncryptFile``（透明读取明文或密文）。
+            clear: 是否在加载前清空现有配置。默认为 ``True``，
+                保持与旧行为一致；传 ``False`` 可在现有配置基础上叠加。
         """
-        self._config.clear()
+        if clear:
+            self._config.clear()
         for f in conf_files:
             if isinstance(f, str):
                 f = Path(f)
