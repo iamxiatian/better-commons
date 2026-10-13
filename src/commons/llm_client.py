@@ -210,7 +210,11 @@ class ChatReply:
         try:
             choice = self.response_data["choices"][0]
             if "message" in choice:
-                return str(choice["message"]["content"]).strip()
+                content = choice["message"]["content"]
+                if isinstance(content, str):
+                    return content.strip()
+                else:
+                    return dumps(choice["message"]["content"])
             return str(choice["text"]).strip()
         except (KeyError, IndexError, TypeError, ValueError):
             return dumps(self.response_data)
