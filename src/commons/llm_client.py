@@ -589,6 +589,22 @@ class ChatClient:
                 model=self.model,
             )
 
+    def _guess_chat_status(
+        self, response_data: dict[str, Any] | None
+    ) -> ChatStatus:
+        if response_data is None:
+            return ChatStatus.UNKNOWN
+
+        finish_reason: str = str(
+            response_data["choices"][0].get("finish_reason")
+        ).lower()
+        if "length" in finish_reason:
+            return ChatStatus.LENGTH_LIMIT
+        elif "filter" in finish_reason:
+            return ChatStatus.SENSITIVE
+        else:
+            return ChatStatus.SUCCESS
+
     async def _post_and_parse(
         self,
         url: str,
@@ -615,12 +631,7 @@ class ChatClient:
                 trace_id=trace_id,
             )
 
-            if response_data is None:
-                chat_status = ChatStatus.UNKNOWN
-            elif response_data["choices"][0].get("finish_reason") == "length":
-                chat_status = ChatStatus.LENGTH_LIMIT
-            else:
-                chat_status = ChatStatus.SUCCESS
+            chat_status = self._guess_chat_status(response_data)
 
             return ChatReply(
                 response_data=response_data,
