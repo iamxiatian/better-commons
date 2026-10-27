@@ -80,7 +80,9 @@ class Config:
 
                 if name_elem is not None and value_elem is not None:
                     name = str(name_elem.text).strip()
-                    value = str(value_elem.text).strip()
+                    value_text = value_elem.text
+                    # 只要存在value_elem，则值可以是空字符串，但不能是None
+                    value = str(value_text).strip() if value_text else ""
                     self._config[name] = value
         except ET.ParseError as e:
             print(f"警告: 解析XML文件失败: {e}")
