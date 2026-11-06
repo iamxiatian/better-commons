@@ -1,3 +1,10 @@
+## [TO BE RELEASED]
+
+- 图像和 PDF 标注默认绘制 RegionLike 的矩形框（x1, y1, x2, y2）
+- polygon_points 能围成多边形，且顶点不是矩形框四角时，同时绘制该多边形
+- 类别名称绘制在矩形框左侧；order 不为空时绘制在右侧，不与 label 拼接
+- 标注颜色改为按类别编号 cls_id 从 cls_color_map 取值
+
 ## [V0.3.1] - 2026-10-27
 
 - 修复conf读取xml元素值的错误，只要存在value_elem，则值可以是空字符串，但不能是None

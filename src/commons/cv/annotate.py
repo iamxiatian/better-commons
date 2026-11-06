@@ -1,13 +1,49 @@
+"""
+=========================================================
+标注绘图的颜色、字体与区域标签
+=========================================================
+
+提供图像和 PDF 标注共用的字体查找、对比色和矩形边界。
+
+修改历史
+--------
+2026-11-06: 按矩形框、多边形和 score、order 生成绘制信息
+2026-11-06: 仅当四个顶点与矩形四角重合时才跳过多边形
+2026-11-06: 按类别编号 cls_id 选取边框颜色
+2026-11-07: 标签只保留类别名称，序号改到矩形右侧
+"""
+
 import platform
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import structlog
 
-from commons.cv.types import Point
+from commons.cv.types import Point, RegionLike
 
 
 logger = structlog.get_logger(__name__)
+
+# 类别编号没有对应颜色时使用的边框颜色
+DEFAULT_REGION_RGB: tuple[int, int, int] = (200, 0, 0)
+
+
+def region_rgb(
+    region: RegionLike,
+    cls_color_map: Mapping[int, tuple[int, int, int]],
+) -> tuple[int, int, int]:
+    """按类别编号取边框颜色。
+
+    Args:
+        region: 待标注区域。
+        cls_color_map: 类别编号到 RGB 的映射，键为 `cls_id`。
+
+    Returns:
+        该类别的颜色。编号为空或未配置时返回默认红色。
+    """
+    if region.cls_id is None:
+        return DEFAULT_REGION_RGB
+    return cls_color_map.get(region.cls_id, DEFAULT_REGION_RGB)
 
 
 def contrast_color(
@@ -72,30 +108,60 @@ def get_font_path() -> Path | None:
     return None
 
 
-def get_polygon_points(
-    points: Sequence[Point], close: bool = True
-) -> list[Point]:
-    """转换为多边形坐标，如果原来是2点坐标，会自动转换成4点坐标，其他情况保留原来的坐标数量
+def region_box(region: RegionLike) -> tuple[float, float, float, float]:
+    """返回矩形框的左、上、右、下边界。"""
+    return (
+        min(region.x1, region.x2),
+        min(region.y1, region.y2),
+        max(region.x1, region.x2),
+        max(region.y1, region.y2),
+    )
+
+
+def should_draw_polygon(region: RegionLike) -> bool:
+    """判断是否要在矩形框之外再绘制多边形。
+
+    顶点少于 3 个时无法围成多边形。四个顶点若就是矩形框的四个角，
+    与 x1、y1、x2、y2 重复，不再另画。梯形等其他四点形状仍会绘制。
+
     Args:
-        points: 原坐标点
-        close: 是否封闭，如果封闭，则把开始的点加入到最后
+        region: 待标注的区域。
 
+    Returns:
+        需要绘制多边形时返回 True。
     """
-    if not points:
-        logger.error("get_polygon_points：传入的点的数量为空.")
-        return []
+    vertices = _open_polygon(region.polygon_points)
+    if len(vertices) < 3:
+        return False
+    return not _is_bbox_corners(vertices, region)
 
-    polygon_points: list[Point] = []
-    if len(points) == 2:
-        # 两点坐标，扩展成四点坐标
-        p1, p3 = points[0], points[1]
-        p2 = Point(x=p3.x, y=p1.y)
-        p4 = Point(x=p1.x, y=p3.y)
-        polygon_points = [p1, p2, p3, p4]
-    else:
-        polygon_points = list(points)
 
-    if close:
-        polygon_points.append(polygon_points[0])
+def _open_polygon(points: Sequence[Point]) -> Sequence[Point]:
+    """去掉与起点重合的闭合点。"""
+    if (
+        len(points) >= 2
+        and points[0].x == points[-1].x
+        and points[0].y == points[-1].y
+    ):
+        return points[:-1]
+    return points
 
-    return polygon_points
+
+def _is_bbox_corners(points: Sequence[Point], region: RegionLike) -> bool:
+    """四个顶点是否与矩形框四角重合，允许 1 像素误差。"""
+    if len(points) != 4:
+        return False
+    pending = [
+        (region.x1, region.y1),
+        (region.x2, region.y1),
+        (region.x2, region.y2),
+        (region.x1, region.y2),
+    ]
+    for point in points:
+        for index, (x, y) in enumerate(pending):
+            if abs(point.x - x) <= 1 and abs(point.y - y) <= 1:
+                pending.pop(index)
+                break
+        else:
+            return False
+    return not pending

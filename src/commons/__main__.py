@@ -69,17 +69,42 @@ def annotate_cmd():
         "./config/sample.pdf", {0: "./config/sample.png"}, dpi=72 * 3
     )
 
-    # 一个版面元素：类别标签 + 坐标点
-    region1 = SimpleRegion("标题", [Point(150, 100), Point(300, 300)])
-    region2 = SimpleRegion("text", [Point(200, 350), Point(450, 600)])
+    # 一个版面元素：矩形框；多边形与矩形四角不同时会额外绘制
+    region1 = SimpleRegion(
+        x1=150,
+        y1=100,
+        x2=300,
+        y2=300,
+        cls_id=0,
+        label="标题",
+        score=0.92,
+        order=1,
+    )
+    region2 = SimpleRegion(
+        x1=200,
+        y1=350,
+        x2=450,
+        y2=600,
+        cls_id=1,
+        label="text",
+        polygon_points=(
+            Point(220, 360),
+            Point(400, 380),
+            Point(430, 560),
+            Point(250, 540),
+            Point(210, 450),
+        ),
+        score=0.81,
+        order=2,
+    )
 
-    color_map = {"标题": (200, 100, 0), "text": (0, 200, 200)}
+    cls_color_map = {0: (200, 100, 0), 1: (0, 200, 200)}
 
-    # 在图像上标注，按 label 指定线框颜色
+    # 在图像上标注，按 cls_id 指定线框颜色
     annot_image_file(
         "./config/sample.png",
         regions=[region1, region2],
-        color_map=color_map,
+        cls_color_map=cls_color_map,
         out_file="./config/sample_annot.png",
     )
 
@@ -89,11 +114,11 @@ def annotate_cmd():
         "./config/sample.pdf",
         {0: [region1, region2], 1: [region1, region2]},
         out_file="./config/sample_annot.pdf",
-        color_map=color_map,
+        cls_color_map=cls_color_map,
         image_dpi=dpi,
     )
 
 
 if __name__ == "__main__":
-    # annotate_cmd()
-    llm_cmd()
+    annotate_cmd()
+    # llm_cmd()
