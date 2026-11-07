@@ -11,6 +11,7 @@
 2026-11-06: score 与 cls_id 允许为空，与 SimpleRegion 对齐
 2026-11-06: 为区域字段补充说明
 2026-11-07: label 在左侧，order 在右侧，score 不参与绘制
+2026-11-07: 有 order 时写成「1: 标题」，score 用较小字号紧跟标签
 """
 
 from dataclasses import dataclass
@@ -57,7 +58,7 @@ class RegionLike(Protocol):
     @property
     def cls_id(self) -> int | None: ...
 
-    # 类别名称，绘制在矩形框左上角，不附带 score 和 order
+    # 类别名称。有 order 时与序号组成「1: 标题」，绘制在矩形框左上角
     @property
     def label(self) -> str: ...
 
@@ -65,11 +66,11 @@ class RegionLike(Protocol):
     @property
     def polygon_points(self) -> tuple[Point, ...]: ...
 
-    # 置信度。绘制时不显示
+    # 置信度。不为空时用主文字 2/3 的字号，紧跟在标签后面
     @property
     def score(self) -> float | None: ...
 
-    # 阅读或排序序号。不为空时绘制在矩形框右上角
+    # 阅读或排序序号。不为空时写在类别名称前，格式为「1: 标题」
     @property
     def order(self) -> int | None: ...
 
@@ -88,11 +89,11 @@ class SimpleRegion:
     y2: float
     # 类别编号，对应 cls_color_map 的键
     cls_id: int
-    # 类别名称，绘制在矩形框左上角，不附带 score 和 order
+    # 类别名称。有 order 时与序号组成「1: 标题」，绘制在矩形框左上角
     label: str
     # 多边形顶点。为空，或正好是矩形四角时，只画矩形框
     polygon_points: tuple[Point, ...] = ()
-    # 置信度。绘制时不显示
+    # 置信度。不为空时用主文字 2/3 的字号，紧跟在标签后面
     score: float | None = None
-    # 阅读或排序序号。不为空时绘制在矩形框右上角
+    # 阅读或排序序号。不为空时写在类别名称前，格式为「1: 标题」
     order: int | None = None

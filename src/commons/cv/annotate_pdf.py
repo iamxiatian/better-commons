@@ -4,7 +4,7 @@
 =========================================================
 
 默认绘制矩形框。多边形与矩形四角不一致时同时绘制多边形。
-类别名称在矩形左侧，order 不为空时在右侧。
+有 order 时标签为「1: 标题」，score 用较小字号紧跟其后。
 
 修改历史
 --------
@@ -12,12 +12,12 @@
 2026-11-06: 梯形等四点多边形与矩形四角不同时仍绘制
 2026-11-06: 边框颜色改为按 cls_id 从 cls_color_map 查找
 2026-11-07: label 画在左侧，order 画在右侧
+2026-11-07: 有 order 时标签为「1: 标题」，score 用较小字号紧跟其后
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from copy import deepcopy
 from pathlib import Path
 
 import pymupdf
@@ -27,7 +27,9 @@ from commons.cv.annotate import (
     contrast_color,
     get_font_path,
     region_box,
+    region_caption,
     region_rgb,
+    region_score_text,
     should_draw_polygon,
 )
 from commons.cv.types import Point, RegionLike, SimpleRegion
@@ -57,6 +59,7 @@ class PdfAnnotator:
         """
         self.scaling_factor = scaling_factor
         self.pdf_font_size = 9  # PDF上的框的标题文字大小
+        self.score_font_size = max(1, round(self.pdf_font_size * 2 / 3))
 
         font_path = get_font_path()
         self.font = (
@@ -118,18 +121,16 @@ class PdfAnnotator:
             )
 
             baseline = sy1 + self.pdf_font_size
-            if region.label:
-                self._draw_tag(
-                    page, region.label, sx1, baseline, normalized_color
-                )
-            if region.order is not None:
+            caption = region_caption(region)
+            score = region_score_text(region)
+            if caption or score:
                 self._draw_tag(
                     page,
-                    str(region.order),
-                    sx2,
+                    caption,
+                    sx1,
                     baseline,
                     normalized_color,
-                    align_right=True,
+                    score=score,
                 )
             polygon_shape.commit()
 
@@ -141,38 +142,47 @@ class PdfAnnotator:
         y: float,
         color: tuple[float, float, float],
         *,
-        align_right: bool = False,
+        score: str | None = None,
     ) -> None:
-        """绘制带底色的文字。
+        """在矩形左上角绘制主文字，score 紧跟其后。
 
         Args:
             page: PDF 页面。
-            text: 要绘制的文字。
-            x: 左对齐时为矩形左边界，右对齐时为矩形右边界。
+            text: 主文字，有 order 时已包含 ``1: 标题``。
+            x: 矩形左边界。
             y: 文字基线的纵坐标。
             color: 背景色，取值为 0 到 1。
-            align_right: 为 True 时文字靠 x 的左侧排列。
+            score: 置信度文本。不为空时用较小字号画在主文字后面。
         """
-        probe = pymupdf.TextWriter(page.rect)
-        probe.append(
-            pymupdf.Point(0, y),
-            text,
-            font=self.font,
-            fontsize=self.pdf_font_size,
-        )
-        ink = probe.text_rect
-        # 右对齐时让文字右边缘贴住矩形右边界，左对齐时贴住左边界
-        text_x = x - ink.x1 if align_right else x - ink.x0
+        # TextWriter.text_rect 比字形宽，位置按 text_length 计算才能紧挨着
+        padding = 2.0
+        gap = 2.0
         writer = pymupdf.TextWriter(page.rect)
-        writer.append(
-            pymupdf.Point(text_x, y),
-            text,
-            font=self.font,
-            fontsize=self.pdf_font_size,
-        )
+        cursor = x + padding
+        if text:
+            writer.append(
+                pymupdf.Point(cursor, y),
+                text,
+                font=self.font,
+                fontsize=self.pdf_font_size,
+            )
+            cursor += self.font.text_length(text, fontsize=self.pdf_font_size)
+        if score:
+            if text:
+                cursor += gap
+            writer.append(
+                pymupdf.Point(cursor, y),
+                score,
+                font=self.font,
+                fontsize=self.score_font_size,
+            )
+            cursor += self.font.text_length(
+                score, fontsize=self.score_font_size
+            )
+        ascender = self.font.ascender * self.pdf_font_size
+        descender = -self.font.descender * self.pdf_font_size
+        rect = pymupdf.Rect(x, y - ascender, cursor + padding, y + descender)
         label_box = page.new_shape()
-        rect = deepcopy(writer.text_rect)
-        rect.y0 += 2
         label_box.draw_rect(rect)
         label_box.finish(
             fill=color,

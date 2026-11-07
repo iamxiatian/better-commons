@@ -4,7 +4,7 @@
 =========================================================
 
 默认绘制矩形框。多边形与矩形四角不一致时同时绘制多边形。
-类别名称在矩形左侧，order 不为空时在右侧。
+有 order 时标签为「1: 标题」，score 用较小字号紧跟其后。
 
 修改历史
 --------
@@ -12,6 +12,8 @@
 2026-11-06: 梯形等四点多边形与矩形四角不同时仍绘制
 2026-11-06: 边框颜色改为按 cls_id 从 cls_color_map 查找
 2026-11-07: label 画在左侧，order 画在右侧
+2026-11-07: 有 order 时标签为「1: 标题」，score 用较小字号紧跟其后
+2026-11-07: 图片字体类型改为 ImageFont 或 FreeTypeFont
 """
 
 from __future__ import annotations
@@ -25,7 +27,9 @@ from commons.cv.annotate import (
     contrast_color,
     get_font_path,
     region_box,
+    region_caption,
     region_rgb,
+    region_score_text,
     should_draw_polygon,
 )
 
@@ -47,13 +51,17 @@ class ImageAnnotator:
             cls_color_map: 类别编号到 RGB 的映射，键为区域的 `cls_id`。
         """
         self.font_size = font_size
-        # 图片字体
+        # 图片字体。score 使用主文字 2/3 的字号
         self.label_image_font = self._get_image_font(font_size)
+        self.score_font_size = max(1, round(font_size * 2 / 3))
+        self.score_image_font = self._get_image_font(self.score_font_size)
         self.cls_color_map: dict[int, tuple[int, int, int]] = (
             cls_color_map or {}
         )
 
-    def _get_image_font(self, font_size: int) -> ImageFont.BaseImageFont:
+    def _get_image_font(
+        self, font_size: int
+    ) -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
         font_path: Path | None = get_font_path()
         if font_path:
             return ImageFont.truetype(str(font_path), font_size)
@@ -87,20 +95,23 @@ class ImageAnnotator:
                 width=2,
             )
 
-        left, top, right, _bottom = region_box(region)
-        if region.label:
-            self._draw_tag(draw, region.label, left, top, color)
-        if region.order is not None:
-            self._draw_tag(
-                draw,
-                str(region.order),
-                right,
-                top,
-                color,
-                align_right=True,
-            )
+        left, top, _right, _bottom = region_box(region)
+        caption = region_caption(region)
+        score = region_score_text(region)
+        if caption or score:
+            self._draw_tag(draw, caption, left, top, color, score=score)
 
         return image
+
+    def _text_size(
+        self,
+        draw: ImageDraw.ImageDraw,
+        text: str,
+        font: ImageFont.ImageFont | ImageFont.FreeTypeFont,
+    ) -> tuple[float, float]:
+        """返回文字宽高。"""
+        box = draw.textbbox((0, 0), text, font=font)
+        return (box[2] - box[0], box[3] - box[1])
 
     def _draw_tag(
         self,
@@ -110,42 +121,57 @@ class ImageAnnotator:
         y: float,
         color: tuple[int, int, int],
         *,
-        align_right: bool = False,
+        score: str | None = None,
     ) -> None:
-        """绘制带底色的文字。
+        """在矩形左上角绘制主文字，score 紧跟其后。
 
         Args:
             draw: PIL 绘图对象。
-            text: 要绘制的文字。
-            x: 左对齐时为背景左边界，右对齐时为背景右边界。
+            text: 主文字，有 order 时已包含 ``1: 标题``。
+            x: 背景左边界。
             y: 背景上边界。
             color: 背景 RGB 颜色。
-            align_right: 为 True 时文字靠 x 的左侧排列。
+            score: 置信度文本。不为空时用较小字号画在主文字后面。
         """
         padding = 5
-        probe = draw.textbbox((0, y), text, font=self.label_image_font)
-        text_w = probe[2] - probe[0]
-        if align_right:
-            bg_right = x
-            bg_left = x - text_w - padding * 2
-        else:
-            bg_left = x
-            bg_right = x + text_w + padding * 2
+        gap = 2 if text and score else 0
+        label_w, label_h = (
+            self._text_size(draw, text, self.label_image_font)
+            if text
+            else (0.0, 0.0)
+        )
+        score_w, score_h = (
+            self._text_size(draw, score, self.score_image_font)
+            if score
+            else (0.0, 0.0)
+        )
+        content_h = max(label_h, score_h)
+        bg_right = x + padding * 2 + label_w + gap + score_w
         text_rgb = contrast_color(
             (color[0] / 255.0, color[1] / 255.0, color[2] / 255.0)
         )
         text_fill = tuple(int(channel * 255) for channel in text_rgb)
         draw.rectangle(
-            (bg_left, y, bg_right, probe[3] + padding),
+            (x, y, bg_right, y + content_h + padding),
             fill=(*color, 175),
             outline=None,
         )
-        draw.text(
-            (bg_left + padding, y),
-            text,
-            font=self.label_image_font,
-            fill=text_fill,
-        )
+        cursor = x + padding
+        if text:
+            draw.text(
+                (cursor, y + content_h - label_h),
+                text,
+                font=self.label_image_font,
+                fill=text_fill,
+            )
+            cursor += label_w + gap
+        if score:
+            draw.text(
+                (cursor, y + content_h - score_h),
+                score,
+                font=self.score_image_font,
+                fill=text_fill,
+            )
 
     def annot_image_file(
         self,
@@ -190,8 +216,8 @@ def annot_image_file(
     """按区域在图像上绘制矩形框并保存。
 
     默认绘制 x1、y1、x2、y2 确定的矩形。polygon_points 能围成多边形，
-    且不是矩形框的四个角时，同时绘制多边形。类别名称在左侧，
-    order 不为空时在右侧单独绘制。
+    且不是矩形框的四个角时，同时绘制多边形。有 order 时标签为
+    「1: 标题」，score 用主文字 2/3 的字号紧跟在后面。
 
     Args:
         image_file: 输入图像路径。

@@ -11,6 +11,7 @@
 2026-11-06: 仅当四个顶点与矩形四角重合时才跳过多边形
 2026-11-06: 按类别编号 cls_id 选取边框颜色
 2026-11-07: 标签只保留类别名称，序号改到矩形右侧
+2026-11-07: 有 order 时标签为「1: 标题」，score 用较小字号紧跟其后
 """
 
 import platform
@@ -106,6 +107,36 @@ def get_font_path() -> Path | None:
         if Path(f).exists():
             return Path(f)
     return None
+
+
+def region_caption(region: RegionLike) -> str:
+    """矩形左上角的主文字。
+
+    指定了 order 时格式为 ``1: 标题``，否则只返回类别名称。
+
+    Args:
+        region: 待标注的区域。
+
+    Returns:
+        主文字。类别名称为空且没有 order 时返回空字符串。
+    """
+    if region.order is not None:
+        return f"{region.order} {region.label}"
+    return region.label
+
+
+def region_score_text(region: RegionLike) -> str | None:
+    """紧跟在主文字后面的置信度。
+
+    Args:
+        region: 待标注的区域。
+
+    Returns:
+        保留 3 位小数的分数字符串。score 为空时返回 None。
+    """
+    if region.score is None:
+        return None
+    return f"{region.score:.3f}"
 
 
 def region_box(region: RegionLike) -> tuple[float, float, float, float]:
