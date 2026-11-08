@@ -31,6 +31,7 @@
 2026-05-31: 将reponse_format_type修改为response_format，可以传入dict，方便支持结构化输出的复杂情况
 2026-06-01: 设置enable_thinking=False
 2026-06-22: 支持cache
+2026-11-08: 实现 ChatClient.__str__，输出主要配置便于排查
 """
 
 from __future__ import annotations
@@ -721,6 +722,16 @@ class ChatClient:
 
         return data, response.status_code
 
+    def __str__(self) -> str:
+        """返回客户端的主要配置，便于日志排查。"""
+        return (
+            f"ChatClient(model={self.model}, api_base={self.api_base}, "
+            f"max_tokens={self.max_tokens}, "
+            f"temperature={self.temperature}, top_p={self.top_p}, "
+            f"n_choices={self.n_choices}, "
+            f"enable_thinking={self.thinking_enabled}, "
+            f"timeout={self.timeout}s, cache={self.cache_enabled})"
+        )
 
 # =========================================================
 # 工厂函数
