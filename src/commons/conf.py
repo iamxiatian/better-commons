@@ -28,6 +28,7 @@ XML文件格式示例
 修改历史
 --------
 2026-07-27: 支持xml和环境变量的配置类
+2026-11-13: 支持把另一个 Config 合并进当前配置，同名项被覆盖
 """
 
 from __future__ import annotations
@@ -113,7 +114,7 @@ class Config:
         """
         return key in self._config
 
-    def save(self, key: str, value: str) -> None:
+    def set(self, key: str, value: str) -> None:
         """设置配置值。
 
         Args:
@@ -121,6 +122,20 @@ class Config:
             value: 配置值。
         """
         self._config[key] = value
+
+    def merge(self, conf: Config) -> Config:
+        """把另一个配置合并到当前对象。
+
+        传入配置里的键会写到当前对象上。两边都有的键，以传入配置为准。
+
+        Args:
+            conf: 要合并进来的配置。
+
+        Returns:
+            当前配置对象，便于连续调用。
+        """
+        self._config.update(conf._config)
+        return self
 
     def get_str(self, key: str) -> str:
         """读取字符串配置。
